@@ -1,0 +1,51 @@
+[project]
+name = "geoweb"
+version = "0.1.0"
+description = "Find where any photo — or video — was taken. A local-first, open-source browser console around a full Geointelligence recon pipeline."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Bahae Eddine HALIM" }]
+keywords = ["geolocation", "osint", "photogeolocation", "opencv", "computer-vision", "local-first"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Topic :: Societal Info",
+]
+dependencies = [
+    "numpy>=1.26",
+    "pillow>=10",
+]
+
+[project.optional-dependencies]
+# Core video feature: extracting frames from mp4/mov/webm clips.
+video = ["opencv-python-headless>=4.8,<5"]
+# Full recon (ML): the StreetCLIP + GeoCLIP world prior, detection, calibration.
+ml = ["torch", "torchvision", "transformers", "geoclip", "safetensors"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://halimbahae.github.io/geoweb"
+Repository = "https://github.com/halimbahae/geoweb"
+Documentation = "https://github.com/halimbahae/geoweb/tree/main/docs"
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+# scripts/ is the vendored GeoINT engine — linted upstream, not here.
+extend-exclude = ["scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

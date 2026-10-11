@@ -1,0 +1,28 @@
+# GeoWeb — Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/>
+__pycache__/
+*.py[cod]
+.DS_Store
+.venv/
+.ruff_cache/
+.pytest_cache/
+.coverage
+build/
+dist/
+.playwright-mcp/
+.geo-cache/
+*.part
+*.tmp
+
+# test media at the repo root (never commit unlabelled photos/videos)
+/*.jpg
+/*.jpeg
+/*.png
+/*.webp
+/*.mp4
+/*.mov
+/*.mkv
+/*.avi
+
+# local archive root used by docker-compose (mounted, never committed)
+/photos/
+/photos-root/

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security
+    url: https://github.com/halimbahae/geoweb/security/policy
+    about: Report a vulnerability
+  - name: GeoWeb author
+    url: https://www.linkedin.com/in/halimbahae/
+    about: Bahae Eddine HALIM

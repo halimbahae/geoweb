@@ -1,0 +1,39 @@
+GeoWeb — Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/>
+GeoWeb builds on the open-source work of others. This file records that
+attribution; it is the public face of the licensing notes in LICENSE.
+
+Upstream engine
+---------------
+scripts/ — the GeoInt recon pipeline (recon, intake, meta, ocr, textgeo,
+prior, detect, calib, board, evidence, photo_session, geodata, poy, and the
+rest) is vendored, mostly unchanged, from:
+
+    GeoINT  (c) 2026 GeoInt contributors
+    https://github.com/marouane53/GeoINT       (MIT License)
+
+The GeoWeb additions to the engine are: the browser console (web/), the video
+frame sampler (video/), Docker and docs (this repository).
+
+ML models and datasets invoked by the engine
+--------------------------------------------
+The prior step runs two learned geolocation models whose licences are their
+own, and which must be checked before commercial use:
+
+  * StreetCLIP (geolocal/StreetCLIP) — CLIP ViT-L/14-336 weights trained for
+    geolocation. CC-BY-NC 4.0, research only.
+  * GeoCLIP — MIT.
+  * GeoNames gazetteer data used for country/region/place lookups — CC-BY 4.0.
+
+Reverse image search is performed live against public engines (Yandex, Baidu)
+by the intake step; rate limits and terms of service of those services apply.
+
+Browser assets
+--------------
+  * Leaflet 1.9.4 — vendored under web/static/vendor/leaflet, BSD-2-Clause.
+  * OpenStreetMap tiles are loaded from tile.openstreetmap.org when the
+    "OSM streets" basemap is used; the prior snapshot bases map works offline.
+
+Video decoding
+--------------
+openv-python-headless (BSD-3-Clause) and its bundled FFmpeg backends.
+See https://ffmpeg.org/legal and the opencv COPYING for full terms.

@@ -1,0 +1,16 @@
+data/
+**/__pycache__/
+**/*.pyc
+.env
+.git
+.pytest_cache/
+.ruff_cache/
+tests/
+docs/
+.github/
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+CHANGELOG.md
+Makefile
+pyproject.toml

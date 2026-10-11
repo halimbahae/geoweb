@@ -1,0 +1,19 @@
+# GeoWeb — Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/>
+services:
+  geoweb:
+    build:
+      context: .
+      # Set to 1 to bake torch + StreetCLIP/GeoCLIP into the image (several GB).
+      args:
+        BUILD_ML: ${BUILD_ML:-0}
+    image: geoweb:latest
+    ports:
+      - "8787:8787"
+    volumes:
+      # One place for all archives. Back it up; it is the only thing that matters.
+      - ./data:/geoweb-photos
+      # Model weights + uv cache shared with the host (optional, speeds up rebuilds).
+      - geoweb-cache:/root/.cache
+
+volumes:
+  geoweb-cache:

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeoWeb — find where any photo or video was taken</title>
+<meta name="description" content="GeoWeb is a local-first, open-source console for photo & video geolocation: metadata, OCR, reverse image search, camera calibration and learned world priors, with the evidence in front of you.">
+<meta property="og:title" content="GeoWeb — local-first photo & video geolocation">
+<meta property="og:description" content="Run the recon, see the evidence, make the call. Photos and videos, entirely on your machine.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://halimbahae.github.io/geoweb/assets/img/landing-full.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://halimbahae.github.io/geoweb/assets/img/landing-full.png">
+<link rel="icon" href="assets/img/logo.svg">
+<link rel="stylesheet" href="assets/css/landing.css">
+</head>
+<body>
+<!-- GeoWeb landing — Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/> -->
+<header class="nav">
+  <div class="wrap">
+    <span class="brand"><img src="assets/img/logo.svg" alt="">Geo<em>Web</em></span>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#video">Video</a>
+      <a href="#mcp">MCP</a>
+      <a href="#demos">Demos</a>
+      <a href="https://github.com/halimbahae/geoweb">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero wrap">
+  <img class="mark" src="assets/img/logo.svg" alt="GeoWeb logo">
+  <h1>Find where any photo <span class="grad">or video</span> was taken</h1>
+  <p class="lede">GeoWeb runs a full geolocation recon — metadata, OCR, reverse image search,
+     object detection, camera calibration and learned world priors — and shows you the
+     <strong>evidence</strong>, not just a guess. Everything runs locally.</p>
+  <div class="cta">
+    <a class="btn primary" href="#demos">See it in action →</a>
+    <a class="btn" href="https://github.com/halimbahae/geoweb">Star on GitHub</a>
+  </div>
+  <pre class="term"><code><span class="c"># clone and run — no third-party installs for the server</span>
+git clone https://github.com/halimbahae/geoweb
+cd geoweb && python3 web/app.py --open</code></pre>
+</section>
+
+<section id="how" class="wrap">
+  <h2>Analyst in the loop, by design</h2>
+  <p class="sub">Most geolocation is a black box. GeoWeb keeps you in control: it raises candidates, shows the evidence, and lets you make the final call.</p>
+  <div class="grid g3">
+    <div class="card"><div class="ic">🧭</div><h3>Evidence first</h3><p>EXIF, OCR text & signs, reverse-search near-duplicates, detector crops, horizon calibration and a world-prior map — each with a plain-language caveat.</p></div>
+    <div class="card"><div class="ic">🧪</div><h3>Auditable runs</h3><p>Every step is a real CLI script writing JSON into the session folder. Re-open, re-run, diff and score against ground truth.</p></div>
+    <div class="card"><div class="ic">📴</div><h3>Local & open</h3><p>Stdlib server, no build step, nothing uploaded. MIT-licensed GeoWeb code on top of the vendored GeoINT engine.</p></div>
+  </div>
+</section>
+
+<section id="demos" class="wrap">
+  <h2>Seven demos, ready to run</h2>
+  <p class="sub">Five photos and two real video clips ship with the repo — freely licensed and GPS-stripped. Seed them and run the full recon: <code>make demos</code>.</p>
+  <div class="grid g3 demos">
+    <figure class="demo-card"><img src="assets/img/demos/milan.jpg" alt="Milan Cathedral"><figcaption><span class="k">📷 photo</span> Milan Duomo <span class="lic">CC BY-SA 4.0</span></figcaption></figure>
+    <figure class="demo-card"><img src="assets/img/demos/colosseum.jpg" alt="Colosseum, Rome"><figcaption><span class="k">📷 photo</span> Colosseum, Rome <span class="lic">CC0</span></figcaption></figure>
+    <figure class="demo-card"><img src="assets/img/demos/shibuya.jpg" alt="Shibuya crossing, Tokyo"><figcaption><span class="k">📷 photo</span> Shibuya, Tokyo <span class="lic">CC0</span></figcaption></figure>
+    <figure class="demo-card"><img src="assets/img/demos/eiffel.jpg" alt="Eiffel Tower, Paris"><figcaption><span class="k">📷 photo</span> Eiffel Tower, Paris <span class="lic">public domain</span></figcaption></figure>
+    <figure class="demo-card"><img src="assets/img/demos/taj-mahal.jpg" alt="Taj Mahal, Agra"><figcaption><span class="k">📷 photo</span> Taj Mahal, Agra <span class="lic">CC BY-SA 4.0</span></figcaption></figure>
+    <figure class="demo-card"><img src="assets/img/demos/demo3-contact-sheet.jpg" alt="Video contact sheet"><figcaption><span class="k video">🎬 video</span> Tokyo street + Colosseum <span class="lic">Pexels</span></figcaption></figure>
+  </div>
+  <p class="sub" style="margin-top:18px;font-size:13px">Sources &amp; licences: <a href="https://github.com/halimbahae/geoweb/blob/main/demos/README.md">demos/README.md</a></p>
+</section>
+
+<section class="wrap">
+  <h2>Save &amp; export, your way</h2>
+  <p class="sub">Every session exports to <strong>Markdown, HTML, PDF or JSON</strong> — branded with the GeoWeb logo and author — and drafts are kept in your browser so nothing is lost between visits.</p>
+  <div class="grid g3">
+    <div class="card"><div class="ic">⬇</div><h3>Markdown / JSON</h3><p>The report plus the full recon payload and metadata, straight from the server.</p></div>
+    <div class="card"><div class="ic">🖨️</div><h3>HTML / PDF</h3><p>A self-contained, print-ready page with the logo, the run summary and your report — save as PDF from the browser.</p></div>
+    <div class="card"><div class="ic">💾</div><h3>Local drafts</h3><p>Notes auto-save to browser storage per session; reopen and pick up where you left off.</p></div>
+  </div>
+</section>
+
+<section id="console" class="wrap">
+  <h2>The console</h2>
+  <p class="sub">Sessions, a live job bar, an evidence archive and the final call — in three files and a Leaflet drop-in.</p>
+  <figure class="shot"><img src="assets/img/console-home.png" alt="GeoWeb home — sessions"><figcaption>Your archive: sessions newest-first, with status and accuracy.</figcaption></figure>
+  <figure class="shot" style="margin-top:26px"><img src="assets/img/console-map-full.png" alt="GeoWeb interactive prior map"><figcaption>The interactive prior map: OSM tiles or the exact prior snapshot, GeoCLIP clusters sized by mass, and the model's point guess.</figcaption></figure>
+</section>
+
+<section id="video" class="wrap">
+  <h2>Videos too</h2>
+  <p class="sub">Drop a clip; GeoWeb cuts it into a contact sheet of distinct frames (scene change + dHash dedupe), you pick one, and recon runs exactly as for a photo.</p>
+  <figure class="shot"><img src="assets/img/console-frames.png" alt="GeoWeb video frames tab"><figcaption>Frames tab: contact sheet, timestamps, “use this frame”.</figcaption></figure>
+</section>
+
+<section id="mcp" class="wrap">
+  <h2>Hands for your AI agent</h2>
+  <div class="mcp">
+    <p style="margin:0 0 14px">GeoWeb ships a <strong>Model Context Protocol</strong> server. Point Claude Desktop, Cursor or opencode at your archive and ask in plain language.</p>
+    <pre class="term" style="margin:0"><code><span class="c"># stdio (what assistants spawn)</span>
+GEOWEB_ROOT=~/geoweb-photos uv run mcp/geoweb_mcp.py</code></pre>
+    <div class="grid g3" style="margin-top:18px">
+      <div class="card"><h3>sessions / session</h3><p>List and read any session, its jobs and recon summary.</p></div>
+      <div class="card"><h3>start_recon / recon_status</h3><p>Kick off a quick or full recon, watch it finish.</p></div>
+      <div class="card"><h3>frames / read_file</h3><p>Inspect video frames and any artifact inside a session.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>How a run goes</h2>
+  <ol class="steps">
+    <li><strong>Upload</strong> a photo or clip — the server byte-copies and checksums it into a session folder.</li>
+    <li><strong>Recon</strong> quick (no ML) or full (world-prior models). Steps land live in the job bar with digests.</li>
+    <li><strong>Read the evidence</strong> — metadata, OCR, reverse-search sheets, detector crops, calibration, the prior map.</li>
+    <li><strong>Decide and finish</strong> — record country/region/city/coords/confidence, write a report, keep the archive.</li>
+  </ol>
+</section>
+
+<section id="demo" class="wrap">
+  <h2>Live demo</h2>
+  <p class="sub">Static pages only — the console itself runs on your machine because your photos never leave it.</p>
+  <div class="cta" style="justify-content:flex-start">
+    <a class="btn primary" href="https://github.com/halimbahae/geoweb#quickstart">Quickstart</a>
+    <a class="btn" href="https://github.com/halimbahae/geoweb/blob/main/docs/api.md">API docs</a>
+    <a class="btn" href="https://github.com/halimbahae/geoweb/blob/main/mcp/README.md">MCP guide</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>GeoWeb — MIT · built by <a href="https://www.linkedin.com/in/halimbahae/">Bahae Eddine HALIM</a></span>
+    <span style="margin-left:auto"><a href="https://github.com/halimbahae/geoweb">github.com/halimbahae/geoweb</a></span>
+  </div>
+</footer>
+<script src="assets/js/landing.js"></script>
+</body>
+</html>

@@ -23,7 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Core video feature: extracting frames from mp4/mov/webm clips.
-video = ["opencv-python-headless>=4.8,<5"]
+video = ["opencv-python-headless>=4.8,<6"]
 # Full recon (ML): the StreetCLIP + GeoCLIP world prior, detection, calibration.
 ml = ["torch", "torchvision", "transformers", "geoclip", "safetensors"]
 

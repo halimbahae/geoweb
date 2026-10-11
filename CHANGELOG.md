@@ -60,6 +60,13 @@ GeoWeb — Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/>
 - **Non-spoiler demo sessions** — bundled demo sessions are named
   `demo-image-1..5` / `demo-video-1..2` (and their media files are opaque) so
   opening one doesn't reveal the answer.
+- **Landing page: glassmorphism + quickstart** — frosted-glass cards and code
+  blocks, a no-flash dark/light theme toggle (persisted), a **Copy** button on
+  every code block, and an MCP quickstart with per-agent copy-paste configs
+  (**ChatGPT, Claude, opencode, Cursor, Codex, GitHub Copilot CLI, Grok CLI**).
+  `mcp/README.md` gains a remote-SSE section for ChatGPT Connectors / Claude web.
+- **Dev dependency group** — `pytest`/`ruff` moved to a `[dependency-groups] dev`
+  table so `uv run`, `uv sync --group dev` and CI resolve them consistently.
 
 ### 2026-10-11
 

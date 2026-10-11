@@ -13,6 +13,7 @@
   <meta name="twitter:image" content="https://halimbahae.github.io/geoweb/assets/img/landing-full.png">
 <link rel="icon" href="assets/img/logo.svg">
 <link rel="stylesheet" href="assets/css/landing.css">
+<script>(function(){try{var t=localStorage.getItem("geoweb:theme")||((window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches)?"light":"dark");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
 </head>
 <body>
 <!-- GeoWeb landing — Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/> -->
@@ -25,6 +26,7 @@
       <a href="#mcp">MCP</a>
       <a href="#demos">Demos</a>
       <a href="https://github.com/halimbahae/geoweb">GitHub</a>
+      <button id="theme-toggle" class="theme-btn" type="button" title="Toggle dark / light theme" aria-label="Toggle dark / light theme">🌙</button>
     </nav>
   </div>
 </header>
@@ -93,16 +95,132 @@ cd geoweb && python3 web/app.py --open</code></pre>
 
 <section id="mcp" class="wrap">
   <h2>Hands for your AI agent</h2>
+  <p class="sub">GeoWeb ships a <strong>Model Context Protocol</strong> server. Point your assistant — <strong>ChatGPT</strong>, <strong>Claude</strong>, opencode, Cursor, Codex, Copilot CLI or Grok — at your archive and ask in plain language.</p>
+
   <div class="mcp">
-    <p style="margin:0 0 14px">GeoWeb ships a <strong>Model Context Protocol</strong> server. Point Claude Desktop, Cursor or opencode at your archive and ask in plain language.</p>
-    <pre class="term" style="margin:0"><code><span class="c"># stdio (what assistants spawn)</span>
-GEOWEB_ROOT=~/geoweb-photos uv run mcp/geoweb_mcp.py</code></pre>
-    <div class="grid g3" style="margin-top:18px">
-      <div class="card"><h3>sessions / session</h3><p>List and read any session, its jobs and recon summary.</p></div>
-      <div class="card"><h3>start_recon / recon_status</h3><p>Kick off a quick or full recon, watch it finish.</p></div>
-      <div class="card"><h3>frames / read_file</h3><p>Inspect video frames and any artifact inside a session.</p></div>
+    <div class="step-row">
+      <div class="step-badge">1</div>
+      <div class="step-body">
+        <h3>Run the server</h3>
+        <p class="help">One stdio command. Nothing is installed globally — <code>uv</code> fetches the MCP SDK on the fly.</p>
+        <pre class="term"><code>GEOWEB_ROOT=~/geoweb-photos uv run /path/to/geoweb/mcp/geoweb_mcp.py</code></pre>
+      </div>
+    </div>
+
+    <div class="step-row">
+      <div class="step-badge">2</div>
+      <div class="step-body">
+        <h3>Paste the config into your agent</h3>
+        <p class="help">Pick your assistant, hit <strong>Copy</strong>, drop it in the file shown, then restart the app.</p>
+
+        <div class="agent-tabs" role="tablist">
+          <button class="agent-tab active" type="button" data-agent="opencode">opencode</button>
+          <button class="agent-tab" type="button" data-agent="claude">Claude</button>
+          <button class="agent-tab" type="button" data-agent="chatgpt">ChatGPT</button>
+          <button class="agent-tab" type="button" data-agent="cursor">Cursor</button>
+          <button class="agent-tab" type="button" data-agent="codex">Codex</button>
+          <button class="agent-tab" type="button" data-agent="copilot">Copilot CLI</button>
+          <button class="agent-tab" type="button" data-agent="grok">Grok CLI</button>
+        </div>
+
+        <div class="agent-pane active" data-agent="opencode">
+          <pre class="term"><code><span class="c">// opencode.json</span>
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "geoweb": {
+      "type": "local",
+      "command": ["uv", "run", "/path/to/geoweb/mcp/geoweb_mcp.py"],
+      "environment": { "GEOWEB_ROOT": "~/geoweb-photos" },
+      "enabled": true
+    }
+  }
+}</code></pre>
+          <p class="agent-note">Or run <code>opencode mcp add geoweb</code> and follow the prompts.</p>
+        </div>
+
+        <div class="agent-pane" data-agent="claude">
+          <pre class="term"><code><span class="c"># Claude Code — one command (user scope)</span>
+claude mcp add geoweb --scope user \
+  --env GEOWEB_ROOT=~/geoweb-photos \
+  -- uv run /path/to/geoweb/mcp/geoweb_mcp.py</code></pre>
+          <pre class="term" style="margin-top:10px"><code><span class="c">// Claude Desktop — claude_desktop_config.json</span>
+{
+  "mcpServers": {
+    "geoweb": {
+      "command": "uv",
+      "args": ["run", "/path/to/geoweb/mcp/geoweb_mcp.py"],
+      "env": { "GEOWEB_ROOT": "~/geoweb-photos" }
+    }
+  }
+}</code></pre>
+          <p class="agent-note">Remote MCP (SSE) is also supported for Claude web/desktop connectors — see the ChatGPT tab.</p>
+        </div>
+
+        <div class="agent-pane" data-agent="chatgpt">
+          <pre class="term"><code><span class="c"># Expose GeoWeb over SSE, then add it as a Connector</span>
+GEOWEB_ROOT=~/geoweb-photos uv run /path/to/geoweb/mcp/geoweb_mcp.py \
+  --transport sse --port 8989
+
+<span class="c"># ChatGPT → Settings → Connectors → Advanced → Developer mode</span>
+<span class="c"># Add MCP server URL:  http://127.0.0.1:8989/sse</span></code></pre>
+          <p class="agent-note">ChatGPT (and Claude web) reach the server over HTTP — expose the port with a tunnel such as <code>cloudflared</code> or <code>ngrok</code>. Same URL works for any remote-MCP client.</p>
+        </div>
+
+        <div class="agent-pane" data-agent="cursor">
+          <pre class="term"><code><span class="c">// .cursor/mcp.json  (project) or ~/.cursor/mcp.json</span>
+{
+  "mcpServers": {
+    "geoweb": {
+      "command": "uv",
+      "args": ["run", "/path/to/geoweb/mcp/geoweb_mcp.py"],
+      "env": { "GEOWEB_ROOT": "~/geoweb-photos" }
+    }
+  }
+}</code></pre>
+        </div>
+
+        <div class="agent-pane" data-agent="codex">
+          <pre class="term"><code><span class="c"># ~/.codex/config.toml</span>
+[mcp_servers.geoweb]
+command = "uv"
+args = ["run", "/path/to/geoweb/mcp/geoweb_mcp.py"]
+env = { GEOWEB_ROOT = "~/geoweb-photos" }</code></pre>
+        </div>
+
+        <div class="agent-pane" data-agent="copilot">
+          <pre class="term"><code><span class="c">// ~/.copilot/mcp-config.json</span>
+{
+  "mcpServers": {
+    "geoweb": {
+      "type": "local",
+      "command": "uv",
+      "args": ["run", "/path/to/geoweb/mcp/geoweb_mcp.py"],
+      "env": { "GEOWEB_ROOT": "~/geoweb-photos" },
+      "tools": ["*"]
+    }
+  }
+}</code></pre>
+        </div>
+
+        <div class="agent-pane" data-agent="grok">
+          <pre class="term"><code><span class="c"># ~/.grok/config.toml</span>
+[mcp_servers.geoweb]
+command = "uv"
+args = ["run", "/path/to/geoweb/mcp/geoweb_mcp.py"]
+env = { GEOWEB_ROOT = "~/geoweb-photos" }</code></pre>
+        </div>
+      </div>
     </div>
   </div>
+
+  <div class="grid g3" style="margin-top:18px">
+    <div class="card"><h3>sessions / session</h3><p>List and read any session, its jobs and recon summary.</p></div>
+    <div class="card"><h3>start_recon / recon_status</h3><p>Kick off a quick or full recon, watch it finish.</p></div>
+    <div class="card"><h3>frames / read_file</h3><p>Inspect video frames and any artifact inside a session.</p></div>
+  </div>
+
+  <p class="sub" style="margin:20px 0 0;font-size:13px">Full guide with every client: <a href="https://github.com/halimbahae/geoweb/blob/main/mcp/README.md">mcp/README.md</a></p>
 </section>
 
 <section class="wrap">

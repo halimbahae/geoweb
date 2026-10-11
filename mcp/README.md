@@ -175,6 +175,27 @@ Grok also reads the `.mcp.json` / Cursor form below.
 Use the same `mcpServers` JSON as Cursor; VS Code stores it in
 `.vscode/mcp.json` under the `servers` key instead of `mcpServers`.
 
+### Remote MCP over SSE (ChatGPT, Claude web, …)
+
+Hosted assistants — ChatGPT **Connectors**, Claude web/desktop remote servers,
+and any other HTTP MCP client — speak MCP over SSE rather than stdio. Start the
+SSE transport and point the client at the `/sse` URL:
+
+```bash
+GEOWEB_ROOT=~/geoweb-photos uv run mcp/geoweb_mcp.py --transport sse --port 8989
+# → http://127.0.0.1:8989/sse
+```
+
+- **ChatGPT**: Settings → Connectors → *Advanced* → enable **Developer mode**,
+  then add the MCP server URL above.
+- **Claude / any remote client**: add the same URL as a remote MCP server.
+
+A loopback URL only works when the client runs on the same machine. To reach it
+from a hosted app, expose the port with a tunnel — e.g.
+`cloudflared tunnel --url http://127.0.0.1:8989` or `ngrok http 8989` — and use
+the public `…/sse` URL. Everything still runs on your machine; only the MCP
+transport is forwarded.
+
 ### Verify
 
 ```bash

@@ -53,27 +53,21 @@ Requirements: **Python 3.10+** and **[uv](https://docs.astral.sh/uv/)** (steps
 declare their own deps as PEP-723 headers). **ffmpeg** only for video. The server
 itself needs no third-party packages.
 
-```bash
-git clone https://github.com/halimbahae/geoweb
+<div class="gw-code"><pre><code class="language-bash">git clone https://github.com/halimbahae/geoweb
 cd geoweb
 python3 web/app.py --open          # http://127.0.0.1:8787
-```
-
+</code></pre><button class="gw-copy">Copy</button></div>
 Drop a photo, pick **Quick recon**, read the evidence. Your archive lives in
 `~/geoweb-photos`:
 
-```bash
-python3 web/app.py --root /mnt/photos --port 8788 --host 0.0.0.0 --open
-```
-
+<div class="gw-code"><pre><code class="language-bash">python3 web/app.py --root /mnt/photos --port 8788 --host 0.0.0.0 --open
+</code></pre><button class="gw-copy">Copy</button></div>
 <details>
 <summary><strong>Docker</strong></summary>
 
-```bash
-docker compose up --build                        # http://127.0.0.1:8787
+<div class="gw-code"><pre><code class="language-bash">docker compose up --build                        # http://127.0.0.1:8787
 docker compose build --build-arg BUILD_ML=1      # bake the world-prior models
-```
-</details>
+</code></pre><button class="gw-copy">Copy</button></div></details>
 
 ## Demos
 
@@ -81,11 +75,9 @@ Seven demo sessions ship with the repo — **five photos and two real video clip
 all freely licensed (Wikimedia Commons / Pexels) and GPS-stripped. Seed them into
 your archive and run the full recon on each:
 
-```bash
-make demos                 # uv run demos/seed.py → ~/geoweb-photos, full recon
+<div class="gw-code"><pre><code class="language-bash">make demos                 # uv run demos/seed.py → ~/geoweb-photos, full recon
 python3 demos/seed.py --recon quick   # fast pass, no ML models
-```
-
+</code></pre><button class="gw-copy">Copy</button></div>
 | Session | Kind | Subject (answer key) | Licence |
 | --- | --- | --- | --- |
 | `demo-image-1` | 📷 | Milan Cathedral | CC BY-SA 4.0 |
@@ -137,11 +129,9 @@ sessions now show their contact sheet instead of a "photo not found" tile.
 
 ## Videos
 
-```bash
-# in the console: drag a clip onto the dropzone
+<div class="gw-code"><pre><code class="language-bash"># in the console: drag a clip onto the dropzone
 curl -sX POST http://127.0.0.1:8787/api/sessions -F photo=@clip.mp4
-```
-
+</code></pre><button class="gw-copy">Copy</button></div>
 GeoWeb extracts representative frames, you choose one, and recon treats it like a
 photo. See [docs/video-guide.md](docs/video-guide.md) for the sampler internals.
 
@@ -150,11 +140,9 @@ photo. See [docs/video-guide.md](docs/video-guide.md) for the sampler internals.
 Give an AI assistant hands on the archive over the
 [Model Context Protocol](https://modelcontextprotocol.io):
 
-```bash
-GEOWEB_ROOT=~/geoweb-photos uv run mcp/geoweb_mcp.py            # stdio
+<div class="gw-code"><pre><code class="language-bash">GEOWEB_ROOT=~/geoweb-photos uv run mcp/geoweb_mcp.py            # stdio
 GEOWEB_ROOT=~/geoweb-photos uv run mcp/geoweb_mcp.py --transport sse --port 8989
-```
-
+</code></pre><button class="gw-copy">Copy</button></div>
 Tools: `sessions`, `session`, `start_recon`, `recon_status`, `read_file`,
 `frames`, `tools`. Copy-paste client configs for **opencode, Claude Code, Codex,
 GitHub Copilot CLI, Grok CLI, Cursor, Claude Desktop, VS Code / Windsurf** are in
@@ -169,15 +157,13 @@ when you ask an agent to work on GeoWeb.
 
 ## Architecture
 
-```
-browser ─► web/app.py  (stdlib HTTP: static console + JSON API + job runner)
+<div class="gw-code"><pre><code class="language-">browser ─► web/app.py  (stdlib HTTP: static console + JSON API + job runner)
                  │ uv run
                  ├─ scripts/*.py      vendored GeoINT engine (MIT)
                  └─ video/frames.py   OpenCV frame sampler
                           ▼
         ~/geoweb-photos/<session>/  original/ · recon/ · frames/ · report.md
-```
-
+</code></pre><button class="gw-copy">Copy</button></div>
 Full write-up in [docs/architecture.md](docs/architecture.md); every HTTP
 endpoint is documented in [docs/api.md](docs/api.md).
 
@@ -193,12 +179,10 @@ endpoint is documented in [docs/api.md](docs/api.md).
 | [`docs/`](docs) | quickstart, guides, API, architecture, deployment |
 | [`skills/`](skills) · [`AGENTS.md`](AGENTS.md) | agent guidance |
 
-```bash
-make serve   # run the console      make test   # pytest
+<div class="gw-code"><pre><code class="language-bash">make serve   # run the console      make test   # pytest
 make lint    # ruff                 make ci     # ruff + pytest + py_compile + node --check
 make docker  # build the image      make video  # cut a video into frames
-```
-
+</code></pre><button class="gw-copy">Copy</button></div>
 ## License & attribution
 
 GeoWeb is **MIT** licensed ([LICENSE](LICENSE)). The recon engine under
@@ -208,3 +192,49 @@ in [NOTICE](NOTICE). Some optional learned models are licensed for
 non-commercial use — check before commercial deployment.
 
 Built by **Bahae Eddine HALIM** — <https://www.linkedin.com/in/halimbahae/>
+
+
+<style>
+.gw-code { position: relative; margin: 12px 0; }
+.gw-copy {
+  position: absolute; top: 8px; right: 8px; z-index: 3;
+  font: 700 11.5px/1 ui-sans-serif, system-ui, sans-serif;
+  color: #0b0e12; background: #3fb27f; border: none; border-radius: 7px;
+  padding: 3px 10px; cursor: pointer; opacity: .9; transition: opacity .2s, transform .15s;
+}
+.gw-copy:hover { opacity: 1; transform: translateY(-1px); }
+.gw-copy.copied { opacity: .7; }
+pre { border-radius: 10px; }
+</style>
+
+<script>
+(function(){
+  function trim(t){ return (t||"").replace(/\s+$/,""); }
+  function go(text){
+    var btn = window.curBtn;
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(trim(text)).then(function(){ done(); }, function(){ fallback(); });
+      return;
+    }
+    fallback();
+  }
+  function fallback(){
+    var ta = document.createElement("textarea");
+    ta.value = trim(window.ctext);
+    ta.style.cssText = "position:fixed;left:-9999px;top:0";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand("copy"); } catch(e){}
+    document.body.removeChild(ta);
+    done();
+  }
+  function done(){ window.curBtn.textContent = "Copied ✓"; window.curBtn.disabled = true; setTimeout(function(){
+      window.curBtn.textContent = "Copy"; window.curBtn.disabled = false; }, 1800); }
+  document.querySelectorAll(".gw-copy").forEach(function(b){
+    b.addEventListener("click", function(e){ e.stopPropagation(); window.curBtn = b;
+      var p = b.parentElement; var pre = p.getElementsByTagName("pre")[0];
+      if(!pre){ if(b.nextElementSibling && b.nextElementSibling.tagName === "PRE") pre = b.nextElementSibling; }
+      if(pre){ window.ctext = pre.textContent; go(pre.textContent); }
+    });
+  });
+})();
+</script>

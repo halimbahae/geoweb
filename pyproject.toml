@@ -26,6 +26,9 @@ dependencies = [
 video = ["opencv-python-headless>=4.8,<5"]
 # Full recon (ML): the StreetCLIP + GeoCLIP world prior, detection, calibration.
 ml = ["torch", "torchvision", "transformers", "geoclip", "safetensors"]
+
+[dependency-groups]
+# Dev tooling — installed by default with `uv run` / `uv sync --group dev`.
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.urls]

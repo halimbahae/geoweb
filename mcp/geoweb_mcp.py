@@ -9,11 +9,15 @@ A stdio/server-sent-event (SSE) Model Context Protocol server that exposes a
 local GeoWeb archive (the `~/geoweb-photos` sessions) as MCP tools:
 
     sessions        list every session and its outcome
-    session         one session: metadata, jobs, report, recon status
+    session         one session: metadata, jobs, report, recon status, Lens + sources
     recon           start a recon (quick/full) on a session, or one video frame
     recon_status    per-step progress + the rendered recon summary
     read_file       read a text file inside a session (recon.md, prior.json, ...)
     frames          video sessions: the extracted contact sheet + frame list
+    lens            reverse-image search through Google Lens (Playwright/Chromium)
+    import_lens     import a Lens results page captured by hand
+    sources         venue website, phone/e-mail, socials, press + photos for the answer
+    ask             ask a question about one session (local Ollama, evidence only)
     tools           every curated CLI tool the web console offers (textgeo, board, ...)
 
 The server is read-only apart from starting recon jobs, which use the same
@@ -35,6 +39,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -204,6 +209,8 @@ def session(name: str) -> dict:
         "jobs": jobs,
         "report": (folder / "report.md").read_text(encoding="utf-8", errors="replace") if (folder / "report.md").is_file() else "",
         "recon_summary": md.read_text(encoding="utf-8", errors="replace")[:30000] if md.is_file() else "",
+        "lens": read_json(folder / "recon" / "lens" / "lens.json"),
+        "dossier": read_json(folder / "recon" / "sources" / "dossier.json"),
         "live": recon_live(folder) if md.is_file() else None,
     }
 
@@ -303,6 +310,124 @@ def frames(name: str) -> dict:
         "video": video,
         "contact_rel": "frames/contact_sheet.jpg" if contact.is_file() else "",
     }
+
+
+def _spawn_job(folder: Path, cmd: list[str], kind: str) -> dict:
+    """Run a command inside a session and record it like the console's job runner does."""
+    jl = job_dir(folder) / (uuid.uuid4().hex[:12] + ".log")
+    log = open(jl, "a", encoding="utf-8")
+    proc = subprocess.Popen(cmd, cwd=str(folder), stdout=log, stderr=subprocess.STDOUT,
+                            text=True, env=_base_env())
+    job_id = jl.stem
+
+    def wait() -> None:
+        try:
+            rc = proc.wait()
+        finally:
+            log.close()
+        payload = {"job": job_id, "session": folder.name, "status": "done" if rc == 0 else "failed",
+                   "rc": rc, "kind": kind, "command": [str(c) for c in cmd],
+                   "started": None, "ended": time.strftime("%Y-%m-%dT%H:%M:%S.000+00:00"),
+                   "log": jl.name}
+        try:
+            (job_dir(folder) / (job_id + ".json")).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+
+    threading.Thread(target=wait, daemon=True).start()
+    return {"job": job_id, "session": folder.name, "status": "running", "kind": kind, "log": jl.name}
+
+
+@mcp.tool()
+def lens(name: str, frame: str = "", headed: bool = False, timeout: int = 60) -> dict:
+    """Reverse-image search through Google Lens in Chromium — the step that actually names a place when the
+    local models come up empty. Needs `make lens-install` once. Writes recon/lens/lens.json (overview
+    sentence, exact vs visual matches, screenshot) and a screenshot; a CAPTCHA wall is recorded as 'blocked'
+    rather than guessed around. For a video session pass a frame from the frames tool."""
+    folder = session_folder(name)
+    meta = read_json(folder / "session.json")
+    if frame:
+        if not re.fullmatch(r"[0-9A-Za-z_.+\-]+", frame) or not frame.lower().endswith(tuple(IMAGE_EXTS)):
+            raise ValueError("invalid frame name")
+        rel = "frames/" + frame
+    else:
+        rel = (meta.get("original") or {}).get("relative_path") or ""
+        if not rel:
+            raise ValueError("session has no original file")
+        if meta.get("kind") == "video":
+            raise ValueError("video sessions need a frame — list them with the frames tool")
+    cmd = [UV, "run", "-q", str(REPO / "sources" / "lens.py"), rel,
+           "--out-dir", "recon/lens", "--timeout", str(timeout)]
+    if headed:
+        cmd += ["--headed", "--profile", str(folder / ".webui" / "lens-profile")]
+    return _spawn_job(folder, cmd, "lens")
+
+
+@mcp.tool()
+def import_lens(name: str, text: str, source_url: str = "") -> dict:
+    """Import a Lens results page captured by hand (e.g. copied from a browser that got past the wall).
+    Parses the same exact/visual sections a live capture yields and writes recon/lens/lens.json."""
+    folder = session_folder(name)
+    if not (text or "").strip():
+        raise ValueError("give the captured Lens page text")
+    out = folder / "recon" / "lens"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "lens.txt").write_text(text, encoding="utf-8")
+    cmd = ["python3", str(REPO / "sources" / "lens.py"),
+           "--from-text", str(out / "lens.txt"), "--out-dir", "recon/lens",
+           "--source-url", source_url]
+    proc = subprocess.run(cmd, cwd=str(folder), capture_output=True, text=True, env=_base_env())
+    payload = read_json(out / "lens.json")
+    return {"ok": proc.returncode == 0, "lens": payload,
+            "stdout": proc.stdout.strip()[-2000:], "stderr": proc.stderr.strip()[-2000:]}
+
+
+@mcp.tool()
+def sources(name: str, place: str = "", max_images: int = 6, offline: bool = False) -> dict:
+    """Gather what a human would open by hand for the answer: the venue website (address, phone, e-mail,
+    socials, photographs), OSM/Nominatim tags, and press mentions (Google News RSS + web results).
+    Writes recon/sources/dossier.json (+ img/*), rendered by the console's Sources tab. `place` defaults
+    to the session's recorded answer when it has one."""
+    folder = session_folder(name)
+    meta = read_json(folder / "session.json")
+    res = meta.get("result") or {}
+    place = (place or res.get("city_or_nearest_locality") or "").strip()
+    if not place:
+        raise ValueError("give a place name (this session has no answer yet)")
+    cmd = ["python3", str(REPO / "sources" / "dossier.py"), "--name", place,
+           "--out-dir", "recon/sources", "--max-images", str(max_images)]
+    for key, flag in (("region", "--region"), ("country", "--country")):
+        if res.get(key):
+            cmd += [flag, str(res[key])]
+    if res.get("latitude") is not None and res.get("longitude") is not None:
+        cmd += ["--lat", str(res["latitude"]), "--lon", str(res["longitude"])]
+    if offline:
+        cmd.append("--offline")
+    return _spawn_job(folder, cmd, "dossier")
+
+
+@mcp.tool()
+def ask(name: str, question: str, history: str = "") -> dict:
+    """Ask a question about one session in plain language. The answer is built only from that session's
+    report, recon summary, Lens capture and sources dossier, through a local Ollama model
+    (GEOWEB_CHAT_MODEL / GEOWEB_OLLAMA). It says what is missing instead of guessing. `history` is an
+    optional JSON list of {"role", "content"} turns."""
+    folder = session_folder(name)
+    turns: list[dict] = []
+    if history.strip():
+        try:
+            turns = json.loads(history)
+        except json.JSONDecodeError as exc:
+            raise ValueError("history must be a JSON list of {role, content}") from exc
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from assistant.chat import AssistantError
+    from assistant.chat import ask as chat_ask
+
+    try:
+        return chat_ask(folder, question, turns)
+    except AssistantError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 @mcp.tool()

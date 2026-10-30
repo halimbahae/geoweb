@@ -37,13 +37,20 @@ from urllib.parse import parse_qs, unquote, urlparse
 REPO = Path(__file__).resolve().parent.parent
 SCRIPTS = REPO / "scripts"
 VIDEO_PY = REPO / "video" / "frames.py"
+SOURCES = REPO / "sources"
+LENS_PY = SOURCES / "lens.py"          # Google Lens fallback (Playwright, own env)
+DOSSIER_PY = SOURCES / "dossier.py"    # sources / contacts / photos (stdlib)
 STATIC = Path(__file__).resolve().parent / "static"
 UV = os.environ.get("UV") or "uv"
 PY = sys.executable
 MAX_BODY = 150 * 1024 * 1024
 
+if str(REPO) not in sys.path:  # the chat lives in assistant/chat.py, beside web/
+    sys.path.insert(0, str(REPO))
+from assistant import chat as assistant  # noqa: E402  (needs REPO on sys.path)
+
 SESSION_NAME = re.compile(r"^[0-9A-Za-z_.+\-]+$")
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif"}
 VIDEO_EXTS = {".mp4", ".mov", ".webm", ".m4v", ".mkv", ".avi"}  # accepted video uploads (OpenCV/ffmpeg decodes them)
 FILE_EXTS = IMAGE_EXTS | VIDEO_EXTS | {".pdf", ".json", ".md", ".txt", ".html"}
 
@@ -185,6 +192,14 @@ def list_sessions(root: Path) -> list[dict]:
 
 def _safe_rel(folder: Path, path: Path) -> str:
     return path.relative_to(folder).as_posix()
+
+
+def read_json(path: Path, default: dict | None = None) -> dict:
+    """Small tolerant JSON reader for the optional evidence files."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default if default is not None else {}
 
 
 def files_index(folder: Path) -> dict:
@@ -352,7 +367,7 @@ def start_pipeline(folder: Path, command: list[str], kind: str, slot: tuple) -> 
             raise RuntimeError("a job is already running for this session")
         busy = sum(1 for j in _JOBS.values() if j["proc"].poll() is None)
         if busy >= MAX_JOBS:
-            raise JobBusyError(f"{busy} GeoInt job(s) already running (max {MAX_JOBS})")
+            raise JobBusyError(f"{busy} GeoWeb job(s) already running (max {MAX_JOBS})")
         jl = job_dir(folder) / (uuid.uuid4().hex[:12] + ".log")
         out = open(jl, "a", encoding="utf-8")
         log(f"starting {kind} job for {folder.name}: $ {' '.join(str(c) for c in command)}")
@@ -385,10 +400,122 @@ def start_pipeline(folder: Path, command: list[str], kind: str, slot: tuple) -> 
             if _slots.get(slot) == job_id:
                 _slots.pop(slot, None)
         log(f"job {job_id} finished rc={rc}")
+        try:
+            auto_follow(folder, kind, rc)
+        except Exception as exc:  # noqa: BLE001  (a broken follow-up must not kill the server thread)
+            log(f"auto-fallback error: {exc}")
 
     threading.Thread(target=wait, daemon=True).start()
     return {"job": job_id, "session": folder.name, "status": "running", "kind": kind,
             "started": info_started, "log": jl.name}
+
+
+# --------------------------------------------------------------------------- #
+# the automatic chain: recon → Lens → sources
+# --------------------------------------------------------------------------- #
+
+AUTO_FALLBACK = os.environ.get("GEOWEB_AUTO_FALLBACK", "1").lower() not in ("0", "false", "no", "off")
+
+
+def _analyse_rel(folder: Path) -> str:
+    """The file a session analyses: the original, or the last sampled video frame."""
+    meta = session_meta(folder)
+    rel = (meta.get("original") or {}).get("relative_path") or ""
+    if meta.get("kind") != "video":
+        return rel
+    try:
+        samples = json.loads((folder / "frames" / "samples.json").read_text(encoding="utf-8")).get("samples") or []
+    except (OSError, json.JSONDecodeError):
+        samples = []
+    for sample in reversed(samples):
+        name = sample.get("file") or sample.get("name") or ""
+        if name and (folder / "frames" / name).is_file():
+            return "frames/" + name
+    return rel
+
+
+def _auto_dossier(folder: Path, city_only: bool = False) -> None:
+    """Look up the venue's own sources once the place has a name.
+
+    The name comes from the Lens capture first (Lens prints the entity), then
+    from the recorded city. An empty name means there is nothing honest to
+    search, so the chain simply stops instead of inventing a venue.
+    """
+    if read_json(folder / "recon" / "sources" / "dossier.json").get("address"):
+        return  # already gathered
+    meta = session_meta(folder)
+    result = meta.get("result") or {}
+    name = ""
+    city = str(result.get("city_or_nearest_locality") or "").strip()
+    country = str(result.get("country") or "").strip()
+    if not city and not city_only:
+        try:
+            from sources.lens import place_context, venue_name
+
+            lens = read_json(folder / "recon" / "lens" / "lens.json")
+            name = venue_name(lens)
+            ctx = place_context(lens)
+            city = city or ctx.get("city") or ""
+            country = country or ctx.get("country") or ""
+        except (ImportError, ValueError):
+            name = ""
+    if not city_only:
+        name = name or city
+    name = (name or city or "").strip()
+    if not name:
+        return
+    if not city and result.get("latitude") is None:
+        # A venue name on its own matches the wrong building somewhere else; the
+        # honest move is to stop and say what is missing, not to research a guess.
+        log(f"auto: no city or coordinates for {name!r} — skipping the sources dossier")
+        return
+    cmd = [PY, str(DOSSIER_PY), "--name", name, "--out-dir", "recon/sources"]
+    for flag, value in (("--city", city or result.get("city_or_nearest_locality")),
+                        ("--region", result.get("region")),
+                        ("--country", country or result.get("country"))):
+        if value:
+            cmd += [flag, str(value)]
+    if result.get("latitude") is not None and result.get("longitude") is not None:
+        cmd += ["--lat", str(result["latitude"]), "--lon", str(result["longitude"])]
+    log(f"auto: gathering sources for {name!r}")
+    start_pipeline(folder, cmd, "dossier", ("dossier", str(folder)))
+
+
+def auto_follow(folder: Path, kind: str, rc: int) -> None:
+    """Take the next honest step after a job lands, without being asked.
+
+    A recon on an anonymous interior usually ends with no answer — or with a 9 %
+    world-prior guess in the wrong country. That is exactly when the visual
+    search should run by itself, and a Lens hit should be followed by the venue's
+    sources, contacts and photographs. The chain never overrides a recorded
+    answer and never repeats a step that already produced evidence.
+    Turn it off with GEOWEB_AUTO_FALLBACK=0.
+    """
+    if not AUTO_FALLBACK:
+        return
+    if kind == "recon" and rc != 0:
+        return  # a failed recon is a different problem; do not pile jobs on top
+    if read_json(folder / "session.json").get("result"):
+        return  # a human already concluded this session; leave their evidence alone
+    if kind == "recon":
+        lens = read_json(folder / "recon" / "lens" / "lens.json")
+        if lens.get("status") in ("ok", "imported"):
+            _auto_dossier(folder)
+            return
+        if lens.get("status") in ("blocked", "unavailable"):
+            _auto_dossier(folder, city_only=True)
+            return
+        rel = _analyse_rel(folder)
+        if rel:
+            log(f"auto: recon finished without an answer — running Lens on {rel}")
+            start_pipeline(folder, [UV, "run", "-q", str(LENS_PY), rel, "--out-dir", "recon/lens"],
+                           "lens", ("lens", str(folder)))
+    elif kind == "lens":
+        lens = read_json(folder / "recon" / "lens" / "lens.json")
+        if lens.get("status") in ("ok", "imported"):
+            _auto_dossier(folder)
+        elif lens.get("status") in ("blocked", "unavailable"):
+            _auto_dossier(folder, city_only=True)
 
 
 class JobBusyError(RuntimeError):
@@ -544,7 +671,7 @@ TOOLS_INFO = [
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "GeoWeb/0.1"
-    root: Path = Path.home() / "geoint-photos"
+    root: Path = Path.home() / "geoweb-photos"
 
     # -- plumbing ----------------------------------------------------------- #
     def log_message(self, fmt: str, *args: object) -> None:
@@ -607,6 +734,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"root": str(self.root), "sessions": list_sessions(self.root)})
             elif path.startswith("/api/session/"):
                 self._session_get(path, q)
+            elif path == "/api/assistant":
+                self.send_json(assistant.list_models())
             elif path == "/api/health":
                 self.send_json({"ok": True, "repo": str(REPO), "uv": shutil.which(UV)})
             else:
@@ -642,6 +771,8 @@ class Handler(BaseHTTPRequestHandler):
                 "truth": meta.get("truth"),
                 "files": files_index(folder),
                 "jobs": job_status(folder),
+                "lens": read_json(folder / "recon" / "lens" / "lens.json"),
+                "dossier": read_json(folder / "recon" / "sources" / "dossier.json"),
                 "report": (folder / "report.md").read_text(encoding="utf-8") if (folder / "report.md").is_file() else "",
             })
         elif sub == "recon" and len(parts) == 2:
@@ -759,7 +890,7 @@ class Handler(BaseHTTPRequestHandler):
             if not path.startswith("/api/session/"):
                 self.send_json({"error": "not found"}, 404)
                 return
-            name = path[len("/api/session/"):].strip("/")
+            name = unquote(path[len("/api/session/"):]).strip("/")
             if "/" in name:
                 self.send_json({"error": "not found"}, 404)
                 return
@@ -849,6 +980,12 @@ class Handler(BaseHTTPRequestHandler):
             if not jid:
                 raise ValueError("no recon running for this session")
             self._stop_job(jid)
+        elif sub == "lens":
+            self._start_lens(folder, data)
+        elif sub == "dossier":
+            self._start_dossier(folder, data)
+        elif sub == "chat":
+            self._chat(folder, data)
         elif sub == "finish":
             self._finish(folder, data)
         elif sub == "truth":
@@ -891,6 +1028,88 @@ class Handler(BaseHTTPRequestHandler):
             cmd += ["--skip", ",".join(skip)]
         info = start_pipeline(folder, cmd, "recon", ("recon", str(folder)))
         self.send_json(info, 202)
+
+    def _analysed_rel(self, folder: Path, data: dict) -> str:
+        """The file this session analyses: a chosen frame, else the original."""
+        meta = session_meta(folder)
+        frame = data.get("frame")
+        if frame:
+            if not re.fullmatch(r"[0-9A-Za-z_.+\-]+", str(frame)) or not str(frame).lower().endswith(tuple(IMAGE_EXTS)):
+                raise ValueError("invalid frame name")
+            rel = "frames/" + str(frame)
+            if not (folder / rel).is_file():
+                raise ValueError(f"no such frame: {frame}")
+            return rel
+        rel = (meta.get("original") or {}).get("relative_path")
+        if not rel:
+            raise ValueError("session has no original file")
+        return rel
+
+    def _start_lens(self, folder: Path, data: dict) -> None:
+        """Run the visual-search fallback, or import a capture taken by a human.
+
+        A browser job drives Google Lens (Playwright). `text` is the other path:
+        whatever the Lens page said, pasted by the user or POSTed by a browser
+        that got past the wall — parsed into the same lens.json.
+        """
+        rel = self._analysed_rel(folder, data)
+        out = folder / "recon" / "lens"
+        text = data.get("text")
+        if text:
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "lens.txt").write_text(str(text), encoding="utf-8")
+            cmd = [PY, str(LENS_PY), rel, "--from-text", str(out / "lens.txt"),
+                   "--out-dir", "recon/lens", "--source-url", str(data.get("url") or "")]
+            rc, output = run_capture(cmd, folder)
+            payload = read_json(out / "lens.json")
+            self.send_json({"ok": rc == 0, "imported": True, "lens": payload,
+                            "output": output[-1500:]}, 200 if rc == 0 else 500)
+            if rc == 0:
+                try:
+                    auto_follow(folder, "lens", rc)
+                except Exception as exc:  # noqa: BLE001
+                    log(f"auto-fallback error: {exc}")
+            return
+        cmd = [UV, "run", "-q", str(LENS_PY), rel, "--out-dir", "recon/lens"]
+        if data.get("headed"):
+            cmd.append("--headed")
+            cmd += ["--profile", str(folder / ".webui" / "lens-profile")]
+        info = start_pipeline(folder, cmd, "lens", ("lens", str(folder)))
+        self.send_json(info, 202)
+
+    def _start_dossier(self, folder: Path, data: dict) -> None:
+        """Gather the venue's own sources, contacts and photographs."""
+        meta = session_meta(folder)
+        result = meta.get("result") or {}
+        name = str(data.get("name") or result.get("city_or_nearest_locality") or "").strip()
+        if not name:
+            raise ValueError("give the place to research, e.g. 'Cinéma Le Colisée'")
+        if len(name) > 120:
+            raise ValueError("place name too long")
+        cmd = [PY, str(DOSSIER_PY), "--name", name, "--out-dir", "recon/sources"]
+        pairs = (("--city", data.get("city") or result.get("city_or_nearest_locality")),
+                 ("--region", data.get("region") or result.get("region")),
+                 ("--country", data.get("country") or result.get("country")),
+                 ("--url", data.get("url")))
+        for flag, value in pairs:
+            if value:
+                cmd += [flag, str(value)]
+        lat = data.get("lat", result.get("latitude"))
+        lon = data.get("lon", result.get("longitude"))
+        if lat not in (None, "") and lon not in (None, ""):
+            cmd += ["--lat", str(lat), "--lon", str(lon)]
+        info = start_pipeline(folder, cmd, "dossier", ("dossier", str(folder)))
+        self.send_json(info, 202)
+
+    def _chat(self, folder: Path, data: dict) -> None:
+        """One answer about this session, from a local model and this session's files."""
+        try:
+            answer = assistant.ask(folder, str(data.get("message") or ""),
+                                   data.get("history") or [], model=str(data.get("model") or ""))
+        except assistant.AssistantError as exc:
+            self.send_json({"error": str(exc)}, 503)
+            return
+        self.send_json(answer)
 
     def _stop_job(self, jid: str) -> None:
         with _lock:
@@ -1156,8 +1375,8 @@ def main() -> None:
     ap.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")
     ap.add_argument("--port", type=int, default=8787, help="port (default 8787)")
     ap.add_argument("--max-jobs", type=int, default=3, help="max concurrent GeoWeb jobs (default 3)")
-    ap.add_argument("--root", default=str(Path.home() / "geoint-photos"),
-                    help="Photo archive root (default ~/geoint-photos)")
+    ap.add_argument("--root", default=str(Path.home() / "geoweb-photos"),
+                    help="Photo archive root (default ~/geoweb-photos)")
     ap.add_argument("--open", action="store_true", help="open the browser after starting")
     args = ap.parse_args()
     global MAX_JOBS

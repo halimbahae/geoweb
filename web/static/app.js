@@ -206,7 +206,10 @@ async function loadSession() {
   const res = info.result;
   $("#s-result").innerHTML = res
     ? `<span class="pill ok">${esc(res.country)}${res.region ? " · " + esc(res.region) : ""} · ${esc(res.city_or_nearest_locality)}</span>
-       <div class="mono muted" style="margin-top:6px">${esc(res.latitude)} , ${esc(res.longitude)} — ${esc(res.confidence)}</div>`
+       <div class="mono muted" style="margin-top:6px">
+         ${esc(res.latitude)}, ${esc(res.longitude)} — ${esc(res.confidence)}
+         ${(res.latitude != null && res.longitude != null) ? `<a href="https://www.google.com/maps?q=${encodeURIComponent(res.latitude + ',' + res.longitude)}" target="_blank" rel="noopener" style="margin-left:8px;color:#38bdf8;text-decoration:underline;">🗺 Google Maps ↗</a>` : ""}
+       </div>`
     : "";
   await Promise.all([loadRecon(), loadTools()]);
   $("#btn-tab-frames").classList.toggle("hidden", !isVideo);
@@ -229,7 +232,7 @@ async function loadSession() {
     }
   }
   renderReport();
-  activateTab("overview");
+  activateTab(state.tab || (info.result ? "assistant" : "overview"));
   pollStatus(); // prime the live tracker
 }
 
@@ -577,12 +580,20 @@ function renderOverview() {
 
   if (r.prior) {
     const a = r.prior.assessment || {};
+    const res = sessionResult();
     const comb = (r.prior.combined || []).slice(0, 6).map((x) => `<li>${esc(x.name)} (${(x.p * 100).toFixed(0)}%)</li>`).join("");
     const bg = r.prior.best_guess;
+    const cl = (r.prior.geoclip || {}).clusters || [];
+    const verdict = res
+      ? `<p class="superseded"><strong>✔ Superseded — this session is identified as ${esc(placeLine(res))}</strong>
+           (<code>${esc(res.latitude)}, ${esc(res.longitude)}</code>${res.confidence ? " · " + esc(res.confidence) : ""})${mapsLink(res)}<br>
+           ${a.informative === false ? "The prior called itself <em>uninformative</em> for this frame" : "The prior is a <em>ranking aid only</em>"} — the country percentages, the point guess and the map below are
+           <strong>void</strong> here, kept for calibration scoring, never as a location.</p>`
+      : `<p>${a.informative === false ? "⚠ Uninformative: " + esc((a.reasons || []).join("; ")) : "Informative"}</p>`;
     host.appendChild(block("World prior (models — ranking only)", `
-      <p>${a.informative === false ? "⚠ Uninformative: " + esc((a.reasons || []).join("; ")) : "Informative"}</p>
-      <ul class="list">${comb}</ul>
-      ${bg ? `<p class="muted">Model point guess: ${bg.lat.toFixed(4)}, ${bg.lon.toFixed(4)}${bg.near ? " near " + esc(bg.near) : ""}</p>` : ""}
+      ${verdict}
+      <ul class="list${res ? " void" : ""}">${comb}</ul>
+      ${bg ? `<p class="muted">${res ? "Void model point guess" : "Model point guess"}: ${bg.lat.toFixed(4)}, ${bg.lon.toFixed(4)}${bg.near ? " near " + esc(bg.near) : ""}</p>` : ""}
       ${pathExists(state.info.files, "recon/prior/prior_map.png") ? `
       <div class="prior-map-wrap">
         <div class="prior-map-row">
@@ -591,7 +602,7 @@ function renderOverview() {
           <button id="prior-max" class="btn ghost mini">⛶ fullscreen</button>
         </div>
         <div id="prior-map"></div>
-        <p class="muted"><small>drag to pan · scroll to zoom · click a chip, circle or ★ for details · switch overlays top-right — maps try OSM tiles first, the <em>Prior snapshot</em> layer is the exact prior_map.png and works offline.</small></p>
+        <p class="muted"><small>drag to pan · scroll to zoom · click a chip, circle or ★ for details · switch overlays top-right — maps try OSM tiles first, the <em>Prior snapshot</em> layer is the exact prior_map.png and works offline.${res && cl.length ? " Prior layers start hidden here: with the answer settled they are history, not candidates." : ""}</small></p>
       </div>` : ""}`));
     if (pathExists(state.info.files, "recon/prior/prior_map.png")) initPriorMap();
   }
@@ -650,7 +661,7 @@ function renderEvidence() {
   const keyOut = PRIME.filter(([p]) => pathExists(files, p)).map(([p]) => p);
   renderSheet(host, "Key output", keyOut);
   for (const [dir, label] of groups) {
-    const paths = (files[dir] || []).filter((p) => /\.(jpe?g|png|webp|gif)$/i.test(p));
+    const paths = (files[dir] || []).filter((p) => /\.(jpe?g|png|webp|gif|avif)$/i.test(p));
     if (!paths.length) continue;
     renderSheet(host, label, paths.slice(0, 40));
     shown += paths.length;
@@ -664,6 +675,24 @@ function pathExists(files, rel) {
   const parent = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
   const key = parent || "(root)";
   return (files[key] || []).includes(rel);
+}
+
+// The concluded answer for this session, or null while it is still open.
+// Used to stop model-side artefacts (world prior, point guess) from being read
+// as candidates once a location has been established.
+function sessionResult() {
+  const res = (state.info && state.info.result) || null;
+  if (!res || typeof res.latitude !== "number" || typeof res.longitude !== "number") return null;
+  return res;
+}
+
+function placeLine(res) {
+  return [res.country, res.region, res.city_or_nearest_locality].filter(Boolean).join(" · ");
+}
+
+function mapsLink(res) {
+  const q = encodeURIComponent(`${res.latitude},${res.longitude}`);
+  return `<a href="https://www.google.com/maps?q=${q}" target="_blank" rel="noopener" style="margin-left:8px;color:#38bdf8;text-decoration:underline;">🗺 Google Maps ↗</a>`;
 }
 
 function tag(label, rels) {
@@ -757,6 +786,7 @@ function initPriorMap() {
   const clusters = (gc.clusters || []).filter((c) => c && isNum(c.lat) && isNum(c.lon));
   const pts = (gc.points || []).filter((p) => p && p.length >= 3 && isNum(p[0]) && isNum(p[1]));
   const bg = (prior.best_guess && isNum(prior.best_guess.lat) && isNum(prior.best_guess.lon)) ? prior.best_guess : null;
+  const res = sessionResult();
 
   if (clusters.length) {
     const maxMass = Math.max(1e-6, ...clusters.map((c) => c.mass));
@@ -787,16 +817,32 @@ function initPriorMap() {
       icon: L.divIcon({ className: "guess-icon", html: "★", iconSize: [22, 22], iconAnchor: [11, 16] }),
       zIndexOffset: 1000,
     });
-    guess.bindPopup(`<strong>Model point guess</strong><br>${bg.lat}, ${bg.lon}${bg.near ? " — near " + esc(bg.near) : ""}${bg.country ? " (" + esc(ccName(bg.country)) + ")" : ""}<br><em>${esc(bg.how || "")}</em>`);
-    overlays["Model point guess"] = guess;
+    guess.bindPopup(`<strong>Model point guess${res ? " — void, superseded" : ""}</strong><br>${bg.lat}, ${bg.lon}${bg.near ? " — near " + esc(bg.near) : ""}${bg.country ? " (" + esc(ccName(bg.country)) + ")" : ""}<br><em>${esc(bg.how || "")}</em>${res ? `<br><br><strong>Identified instead:</strong> ${esc(placeLine(res))} — <code>${res.latitude}, ${res.longitude}</code>` : ""}`);
+    overlays[res ? "Model point guess (void)" : "Model point guess"] = guess;
+  }
+  if (res) {
+    const answer = L.circleMarker([res.latitude, res.longitude], {
+      radius: 9, color: "#2dd4bf", weight: 3, fillColor: "#2dd4bf", fillOpacity: 0.5,
+    });
+    answer.bindPopup(`<strong>✔ Identified location</strong><br>${esc(placeLine(res))}<br><code>${res.latitude}, ${res.longitude}</code>${res.confidence ? " · " + esc(res.confidence) : ""}${mapsLink(res)}`);
+    overlays["✔ Identified location"] = answer;
   }
 
   osm.addTo(map);
-  Object.values(overlays).forEach((l) => l.addTo(map));
+  if (res) {
+    // With the answer settled, the prior layers are history: available in the
+    // control, deliberately not drawn over the conclusion.
+    overlays["✔ Identified location"].addTo(map);
+  } else {
+    Object.values(overlays).forEach((l) => l.addTo(map));
+  }
   L.control.layers(base, overlays, { position: "topright", collapsed: true }).addTo(map);
 
   const padView = (latlng, deg) => L.latLngBounds([[latlng.lat - deg, latlng.lng - deg], [latlng.lat + deg, latlng.lng + deg]]);
-  if (clusters.length) {
+  if (res) {
+    state.priorSavedBounds = padView({ lat: res.latitude, lng: res.longitude }, 0.012);
+    map.fitBounds(state.priorSavedBounds, { maxZoom: 15 });
+  } else if (clusters.length) {
     state.priorSavedBounds = L.latLngBounds(clusters.map((c) => [c.lat, c.lon])).pad(0.3);
     map.fitBounds(state.priorSavedBounds, { maxZoom: 9 });
   } else if (bg) {
@@ -811,12 +857,18 @@ function initPriorMap() {
   if (chips) {
     chips.innerHTML = "";
     const add = (t, fn) => { const b = document.createElement("button"); b.className = "chip"; b.textContent = t; b.onclick = fn; chips.appendChild(b); };
+    if (res) {
+      add(`✔ ${placeLine(res)}`, () => map.fitBounds(padView({ lat: res.latitude, lng: res.longitude }, 0.012), { maxZoom: 15 }));
+    }
     clusters.slice(0, 8).forEach((c) => {
       const near = c.near || {};
       const where = [near.name, near.admin1].filter(Boolean).join(", ");
       add(`${((c.mass || 0) * 100).toFixed(0)}% ${where || c.lat + ", " + c.lon}`, () => map.fitBounds(padView(c, 1.4), { maxZoom: 11 }));
     });
-    if (bg) add(`★ ${bg.lat.toFixed(4)}, ${bg.lon.toFixed(4)}${bg.near ? " " + bg.near : ""}`, () => map.fitBounds(padView(bg, 1.1), { maxZoom: 12 }));
+    if (bg) {
+      const label = `${res ? "★ void" : "★"} ${bg.lat.toFixed(4)}, ${bg.lon.toFixed(4)}${bg.near ? " " + bg.near : ""}`;
+      add(label, () => map.fitBounds(padView(bg, 1.1), { maxZoom: 12 }));
+    }
   }
 }
 
@@ -1151,6 +1203,223 @@ function brandedHTML(bundle, forPrint = false) {
 </body></html>`;
 }
 
+// ---------------------------------------------------------------- sources tab
+function renderSources() {
+  const host = $("#tab-sources");
+  const name = state.name;
+  const info = state.info || {};
+  const lens = info.lens || {};
+  const dossier = info.dossier || {};
+  const orig = (info.meta && info.meta.original && info.meta.original.relative_path) || "";
+  const file = (rel) => `/api/session/${encodeURIComponent(name)}/files?path=${encodeURIComponent(rel)}`;
+  host.innerHTML = "";
+
+  // --- Lens: the capture, or the honest way to get one past the wall ------
+  const lensStatus = lens.status || "";
+  const solved = ["ok", "imported"].includes(lensStatus);
+  const place = lens.place || "";
+  const exact = (lens.links || []).filter((l) => l.section === "exact");
+  const visual = (lens.links || []).filter((l) => l.section === "visual");
+  const others = (lens.links || []).filter((l) => !["exact", "visual"].includes(l.section));
+  const linkList = (items) => items.length
+    ? `<ul class="list">${items.map((l) =>
+        `<li><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title || l.domain)}</a>
+           <span class="muted">— ${esc(l.domain)}${l.kind && l.kind !== "other" ? " · " + esc(l.kind) : ""}</span></li>`).join("")}</ul>`
+    : `<p class="muted">none</p>`;
+
+  let lensBody = "";
+  if (solved) {
+    lensBody = `
+      <p><span class="pill ok">${esc(lensStatus)}</span>
+         ${lens.seconds ? `<span class="muted">${esc(String(lens.seconds))}s</span>` : ""}
+         ${lens.url ? `<a class="muted" href="${esc(lens.url)}" target="_blank" rel="noopener">result page ↗</a>` : ""}</p>
+      ${place ? `<p><strong>Lens overview:</strong> ${esc(place)}</p>` : ""}
+      <h4>Exact matches</h4>${linkList(exact)}
+      ${visual.length ? `<h4>Visual matches</h4>${linkList(visual)}` : ""}
+      ${others.length ? `<details><summary class="muted">${others.length} other link(s)</summary>${linkList(others)}</details>` : ""}
+      ${lens.screenshot ? `<p><a href="${file("recon/lens/" + lens.screenshot)}" target="_blank" rel="noopener">
+        <img class="lens-shot" src="${file("recon/lens/" + lens.screenshot)}" alt="Lens capture"></a></p>` : ""}`;
+  } else {
+    const why = lensStatus === "blocked"
+      ? "Google answered the automated browser with a CAPTCHA wall."
+      : lensStatus === "unavailable"
+        ? `The automated browser could not start: ${esc(lens.error || "Playwright/Chromium missing")}.`
+        : lensStatus === "empty"
+          ? "The capture landed on a half-loaded page with no result sections."
+          : "No Lens capture yet.";
+    lensBody = `
+      <p><span class="pill warn">${esc(lensStatus || "not run")}</span> ${why}</p>
+      <p class="muted">The honest way past it: open Lens in your own browser, upload the photo there,
+         then paste the results page text below. It is parsed into <code>recon/lens/lens.json</code> —
+         the same evidence a live capture writes — and the sources dossier then runs by itself.</p>
+      <p style="display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn ghost mini" href="https://lens.google.com/" target="_blank" rel="noopener">Open Google Lens ↗</a>
+        ${orig ? `<a class="btn ghost mini" href="${file(orig)}" download>Download the photo</a>` : ""}
+        <button class="btn ghost mini" id="btn-run-lens">${lensStatus ? "Retry automated Lens" : "Run Lens (automated)"}</button>
+      </p>
+      <textarea id="lens-paste" rows="6" spellcheck="false"
+        placeholder="Paste the Lens results page text here (Ctrl/Cmd+A, Ctrl/Cmd+C on the results page)…"></textarea>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+        <button class="btn primary" id="btn-lens-import">Import Lens capture</button>
+        <span class="muted" id="lens-import-status" style="font-size:12px"></span>
+      </div>`;
+  }
+  host.appendChild(block("Google Lens", lensBody));
+
+  // --- Dossier: the venue's own website, contacts, press, photos ----------
+  const hasDossier = dossier.address || (dossier.phone || []).length || (dossier.email || []).length
+    || (dossier.site && dossier.site.url) || (dossier.sources || []).length;
+  if (hasDossier) {
+    const site = dossier.site || {};
+    const imgs = (dossier.images || []).map((img) => {
+      // dossier.json stores paths relative to recon/ ("sources/img_01.jpg")
+      const rel = /^recon\//.test(img.file) ? img.file : "recon/" + img.file;
+      return `<a href="${file(rel)}" target="_blank" rel="noopener">
+         <img src="${file(rel)}" alt="${esc(img.file)}" loading="lazy"></a>`;
+    }).join("");
+    host.appendChild(block("Sources dossier", `
+      <p class="muted">searched for <strong>${esc((dossier.query && dossier.query.name) || dossier.query || "the place")}</strong>
+        ${dossier.captured_at ? "· " + esc(String(dossier.captured_at).slice(0, 16).replace("T", " ")) : ""}</p>
+      ${site.url ? `<p><strong>Website:</strong> <a href="${esc(site.url)}" target="_blank" rel="noopener">${esc(site.title || site.url)}</a></p>` : ""}
+      ${dossier.address ? `<p><strong>Address:</strong> ${esc(dossier.address)}</p>` : ""}
+      ${(dossier.phone || []).length
+        ? `<p><strong>Phone:</strong> ${dossier.phone.map((x) => `<a href="tel:${esc(x.replace(/\s/g, ""))}"><code>${esc(x)}</code></a>`).join(" · ")}</p>`
+        : `<p><strong>Phone:</strong> <span class="muted">none published${site.url ? " — the site only offers a contact form" : ""}</span></p>`}
+      ${(dossier.email || []).length
+        ? `<p><strong>Email:</strong> ${dossier.email.map((x) => `<a href="mailto:${esc(x)}">${esc(x)}</a>`).join(" · ")}</p>` : ""}
+      ${(dossier.socials || []).length
+        ? `<p><strong>Social:</strong> ${dossier.socials.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.kind)}</a>`).join(" · ")}</p>` : ""}
+      ${(dossier.sources || []).length ? `<h4>Press, social & directory mentions</h4>
+        <ul class="list">${dossier.sources.slice(0, 24).map((x) =>
+          `<li><span class="pill mini">${esc(x.kind)}</span> <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>
+             ${x.site ? `<span class="muted">— ${esc(x.site)}</span>` : ""}</li>`).join("")}</ul>` : ""}
+      ${imgs ? `<h4>Venue photographs</h4><div class="img-grid">${imgs}</div>` : ""}
+      ${(dossier.warnings || []).length
+        ? `<p class="muted" style="font-size:12px">Warnings: ${dossier.warnings.map(esc).join("; ")}</p>` : ""}
+    `));
+  } else {
+    host.appendChild(block("Sources dossier", `
+      <p class="muted">No dossier yet — it gathers the venue website, address, phone/e-mail, socials,
+         press mentions and photographs for the identified place.</p>
+      <button class="btn ghost mini" id="btn-run-dossier">🔗 Build sources dossier</button>`));
+  }
+
+  // --- wiring (ids exist in one of the two Lens states) -------------------
+  const runLens = $("#btn-run-lens");
+  if (runLens) runLens.addEventListener("click", () => startLens());
+  const runDossier = $("#btn-run-dossier");
+  if (runDossier) runDossier.addEventListener("click", () => startDossier());
+  const importBtn = $("#btn-lens-import");
+  if (importBtn) importBtn.addEventListener("click", importLens);
+}
+
+async function importLens() {
+  const ta = $("#lens-paste");
+  const status = $("#lens-import-status");
+  const text = (ta && ta.value || "").trim();
+  if (!text) { if (status) status.textContent = "paste the Lens page text first"; return; }
+  if (status) status.textContent = "parsing…";
+  try {
+    const res = await api(`/api/session/${encodeURIComponent(state.name)}/lens`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, url: "https://lens.google.com/" }),
+    });
+    const n = (res.lens && res.lens.links ? res.lens.links.length : 0);
+    if (status) status.textContent = `imported — ${n} link(s)${res.lens && res.lens.place ? ", overview found" : ""}`;
+    toast("Lens capture imported");
+    await loadSession();
+    activateTab("sources");
+  } catch (e) {
+    if (status) status.textContent = "failed: " + e.message;
+    errMsg(e);
+  }
+}
+
+// ---------------------------------------------------------------- assistant tab
+let chatHistory = [];
+let chatPending = false;
+
+function renderAssistant() {
+  const host = $("#tab-assistant");
+  host.innerHTML = `
+    <div class="chat-wrap">
+      <div id="chat-messages" class="chat-messages"></div>
+      <div class="chat-input-row">
+        <textarea id="chat-input" rows="1" placeholder="Ask about this session… (e.g. 'what phone does the venue publish?')"></textarea>
+        <button class="btn primary" id="btn-chat-send" title="Send">Send</button>
+      </div>
+      <p class="muted" style="font-size:12px;margin-top:6px">
+        Powered by local Ollama (<code id="chat-model"></code>). <span id="chat-status"></span>
+      </p>
+    </div>`;
+  (chatHistory || []).forEach((turn) => addChat(turn.role, turn.content));
+  loadModels();
+  const ta = $("#chat-input");
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
+    ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
+  });
+  $("#btn-chat-send").addEventListener("click", sendChat);
+}
+
+async function loadModels() {
+  try {
+    const r = await api("/api/assistant");
+    const model = r.default || r.models[0] || "—";
+    $("#chat-model").textContent = model;
+    $("#chat-status").textContent = r.available ? "ready" : "unavailable — start ollama serve";
+  } catch { $("#chat-status").textContent = "could not reach the assistant endpoint"; }
+}
+
+function addChat(role, text) {
+  const el = document.createElement("div");
+  el.className = "chat-bubble " + (role === "assistant" ? "assistant" : "user");
+  el.innerHTML = role === "assistant" ? md(text) : esc(text);
+  $("#chat-messages").appendChild(el);
+  $("#chat-messages").scrollTop = $("#chat-messages").scrollHeight;
+}
+
+async function sendChat() {
+  const ta = $("#chat-input");
+  const q = ta.value.trim();
+  if (!q || chatPending) return;
+  ta.value = ""; ta.style.height = "auto";
+  chatPending = true;
+  addChat("user", q);
+  try {
+    const res = await api(`/api/session/${encodeURIComponent(state.name)}/chat`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: q, history: chatHistory }),
+    });
+    addChat("assistant", res.answer);
+    chatHistory.push({ role: "user", content: q }, { role: "assistant", content: res.answer });
+    $("#chat-status").textContent = `model ${res.model} · ${res.seconds}s`;
+  } catch (e) {
+    const msg = e?.message || String(e);
+    addChat("assistant", "⚠ " + msg);
+    $("#chat-status").textContent = "error — see message above";
+  } finally {
+    chatPending = false;
+  }
+}
+
+function startLens() {
+  toast("Starting Google Lens…", "info");
+  api(`/api/session/${encodeURIComponent(state.name)}/lens`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+    .then(r => { toast(r.ok ? "Lens capture imported" : "Lens start failed", r.ok ? "ok" : "err"); loadSession(); })
+    .catch(errMsg);
+}
+
+function startDossier() {
+  const res = state.info?.result || {};
+  const name = prompt("Venue / place name:", res.city_or_nearest_locality || "") || "";
+  if (!name) return;
+  toast("Building sources dossier…", "info");
+  api(`/api/session/${encodeURIComponent(state.name)}/dossier`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) })
+    .then(r => { toast(r.ok || r.job ? "Dossier started" : "Dossier failed", r.ok ? "ok" : "err"); loadSession(); })
+    .catch(errMsg);
+}
+
 function downloadBlob(text, filename, mime) {
   const blob = new Blob([text], { type: mime + ";charset=utf-8" });
   const a = document.createElement("a");
@@ -1326,6 +1595,10 @@ function initEvents() {
   $("#btn-home").addEventListener("click", () => { location.hash = "#/"; });
   $("#btn-refresh").addEventListener("click", loadSession);
   $("#btn-recon-quick").addEventListener("click", () => startRecon("quick").catch(errMsg));
+  const btnLens = $("#btn-lens");
+  if (btnLens) btnLens.addEventListener("click", () => { activateTab("sources"); startLens(); });
+  const btnSources = $("#btn-sources");
+  if (btnSources) btnSources.addEventListener("click", () => activateTab("sources"));
   $("#btn-recon-full").addEventListener("click", () => startRecon("full").catch(errMsg));
   $("#btn-stop").addEventListener("click", async () => {
     try {
@@ -1358,8 +1631,16 @@ function initEvents() {
 }
 
 function activateTab(name) {
+  state.tab = name;
   $$("#tabs .tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
   $$(".tabpane").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
+  if (name === "overview") renderOverview();
+  else if (name === "evidence") renderEvidence();
+  else if (name === "sources") renderSources();
+  else if (name === "tools") renderTools();
+  else if (name === "report") renderReport();
+  else if (name === "assistant") renderAssistant();
+  else if (name === "frames") renderFrames(); // defined in openSession if needed
 }
 
 async function upload(f) {

@@ -59,6 +59,8 @@
       <div class="toolbar card">
         <button id="btn-recon-quick" class="btn primary" data-mode="quick">▶ Quick recon</button>
         <button id="btn-recon-full" class="btn" data-mode="full" title="Downloads local ML models on first use (~6 GB)">Full recon (ML)</button>
+        <button id="btn-lens" class="btn ghost" title="Reverse image search (Google Lens) — names the place">📸 Lens</button>
+        <button id="btn-sources" class="btn ghost" title="Venue website, contacts, press and photos">🔗 Sources</button>
         <label class="check"><input type="checkbox" id="opt-norev"> no reverse image search</label>
         <label class="check"><input type="checkbox" id="opt-skipdetect"> skip detect / calib / prior</label>
         <span class="spacer"></span>
@@ -84,8 +86,10 @@
 
       <nav class="tabs" id="tabs">
         <button data-tab="overview" class="tab active">Overview</button>
+        <button data-tab="assistant" class="tab" id="btn-tab-assistant">💬 Assistant</button>
         <button data-tab="frames" class="tab hidden" id="btn-tab-frames">Frames</button>
         <button data-tab="evidence" class="tab">Evidence</button>
+        <button data-tab="sources" class="tab" id="btn-tab-sources">Sources</button>
         <button data-tab="tools" class="tab">Tools</button>
         <button data-tab="report" class="tab">Report</button>
       </nav>
@@ -93,8 +97,10 @@
       <section id="tab-overview" class="tabpane active"></section>
       <section id="tab-frames" class="tabpane"></section>
       <section id="tab-evidence" class="tabpane"></section>
+      <section id="tab-sources" class="tabpane"></section>
       <section id="tab-tools" class="tabpane"></section>
       <section id="tab-report" class="tabpane"></section>
+      <section id="tab-assistant" class="tabpane"></section>
     </div>
   </div>
   <div id="modal" class="modal hidden" onclick="if(event.target===this)hideModal()"></div>

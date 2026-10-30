@@ -26,3 +26,6 @@ dist/
 # local archive root used by docker-compose (mounted, never committed)
 /photos/
 /photos-root/
+
+# stray duplicate checkout that must never be committed
+/geoweb/

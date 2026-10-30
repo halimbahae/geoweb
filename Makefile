@@ -1,5 +1,5 @@
 # GeoWeb — Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/>
-.PHONY: dev serve video test ci lint docker docs demos
+.PHONY: dev serve video test ci lint docker docs demos lens-install
 
 # Run the console without installing anything (uses `uv` at runtime only).
 serve:
@@ -12,6 +12,10 @@ dev:
 #   make frames ARGS=demo.mp4
 video:
 	uv run video/frames.py $(ARGS)
+
+# Install Playwright + Chromium for the Google Lens fallback (sources/lens.py).
+lens-install:
+	uv run --with playwright python -m playwright install chromium
 
 test:
 	uv run pytest

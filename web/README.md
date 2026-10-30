@@ -1,15 +1,14 @@
 <!-- GeoWeb — Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/> -->
-# GeoInt Web UI
+# GeoWeb Console
 
-A local browser interface around the GeoInt CLI scripts — upload a photo, run the
+A local browser interface around the photo & video geolocation scripts — upload a photo, run the
 recon pass, read the evidence, run the smaller lookups, and finish or score the
 per-photo archive, all without touching a terminal.
 
 Everything runs on this machine. The server is a single dependency-free Python
 file (`app.py`, standard library only); every real pipeline still goes through the
-existing `scripts/*.py` tools via `uv run`, so nothing about the GeoInt method is
-changed. Reads/writes only touch the photo archive root (default
-`~/geoint-photos`).
+existing `scripts/*.py` tools via `uv run`. Reads/writes only touch the photo archive root (default
+`~/geoweb-photos`).
 
 ## Run
 
@@ -39,11 +38,18 @@ model weights into `~/.cache` (same downloads as `doctor.py --models`).
 - **Tools** → parameterised, no-shell wrappers for `textgeo.py`, `geodata.py`,
   `board.py` (init / apply / clue / ingest / rank / next / check / report) and
   `refsheet.py`, plus a free-form `argv` runner for the other scripts.
+- **Sources** → the Google Lens capture (overview sentence, exact vs visual
+  matches, screenshot) and the venue dossier (website, address, phone/e-mail,
+  socials, press mentions, photo grid). If Google walls the automated browser the
+  tab hands you the photo and a paste box instead of inventing a result.
+- **Assistant** → ask this session anything in plain language; answers come only
+  from its report, recon summary, Lens capture and dossier, via local Ollama
+  (`GEOWEB_CHAT_MODEL`, `GEOWEB_OLLAMA`). A concluded session opens here first.
 - **Report** → edit `report.md` in place and **Finish archive**
   (`photo_session.py finish`, renames the folder with the answer) or
   **Record ground truth** (`photo_session.py truth`, scores the guess).
 
-Up to `--max-jobs` GeoInt jobs run at once (default 3; a full recon is expensive),
+Up to `--max-jobs` GeoWeb jobs run at once (default 3; a full recon is expensive),
 so slow steps from different sessions run in parallel rather than blocking the tab;
 oversubscribing returns `409` until a slot frees up.
 
@@ -64,5 +70,5 @@ so a restarted server still sees finished jobs.
 - Binds to `127.0.0.1` by default — a local-only tool, not for public hosting.
 - The server never evaluates shell; all script invocations go through
   `subprocess` argument lists.
-- `test_photo.jpg` and the `~/geoint-photos` archives are just your local test data,
+- `test_photo.jpg` and the `~/geoweb-photos` archives are just your local test data,
   not part of the repo.

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GeoWeb — Find Where Any Photo or Video Was Taken | Local-First Geolocation</title>
-<meta name="description" content="GeoWeb is a local-first, open-source console for photo & video geolocation: metadata, OCR, reverse image search, object detection, camera calibration and learned world priors — with the evidence in front of you. 100% local, nothing uploaded.">
+<meta name="description" content="GeoWeb is a local-first, open-source console for photo & video geolocation: metadata, OCR, reverse image search, object detection, camera calibration, learned world priors, a Google Lens fallback, venue sources/contacts and a chat that answers from the evidence. 100% local, nothing uploaded.">
 <meta name="keywords" content="geolocation, geolocalisation, photo geolocation, video geolocation, geo-intelligence, OSINT, image geolocation, reverse image search, EXIF, OCR, camera calibration, world prior, GeoCLIP, local-first, open source, MIT">
 <meta name="author" content="Bahae Eddine HALIM">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
@@ -48,7 +48,7 @@
   "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
   "author": {"@type": "Person", "name": "Bahae Eddine HALIM", "url": "https://www.linkedin.com/in/halimbahae/"},
   "keywords": "geolocation, OSINT, photo geolocation, video geolocation, reverse image search, OCR, GeoCLIP",
-  "featureList": "Photo upload, Video upload, EXIF metadata, OCR, reverse image search, object detection, camera calibration, world prior map, report export, MCP server"
+  "featureList": "Photo upload, Video upload, EXIF metadata, OCR, reverse image search, Google Lens fallback, venue sources and contacts, object detection, camera calibration, world prior map, local chat assistant, report export, MCP server"
 }
 </script>
 
@@ -63,7 +63,9 @@
     <nav>
       <a href="#how">How it works</a>
       <a href="#video">Video</a>
+      <a href="#sources">Sources</a>
       <a href="#mcp">MCP</a>
+      <a href="#changelog">What's new</a>
       <a href="#demos">Demos</a>
       <a href="https://github.com/halimbahae/geoweb">GitHub</a>
       <button id="theme-toggle" class="theme-btn" type="button" title="Toggle dark / light theme" aria-label="Toggle dark / light theme">🌙</button>
@@ -75,8 +77,10 @@
   <img class="mark" src="assets/img/logo.svg" alt="GeoWeb logo">
   <h1>Find where any photo <span class="grad">or video</span> was taken</h1>
   <p class="lede">GeoWeb runs a full geolocation recon — metadata, OCR, reverse image search,
-     object detection, camera calibration and learned world priors — and shows you the
-     <strong>evidence</strong>, not just a guess. Everything runs locally.</p>
+     object detection, camera calibration and learned world priors — then names the place with
+     <strong>Google Lens</strong>, gathers the venue's <strong>contacts, sources and photos</strong>,
+     and answers your questions in a <strong>local chat</strong>. Evidence, not just a guess.
+     Everything runs on your machine.</p>
   <div class="cta">
     <a class="btn primary" href="#demos">See it in action →</a>
     <a class="btn" href="https://github.com/halimbahae/geoweb">Star on GitHub</a>
@@ -131,6 +135,16 @@ cd geoweb && python3 web/app.py --open</code></pre>
   <h2>Videos too</h2>
   <p class="sub">Drop a clip; GeoWeb cuts it into a contact sheet of distinct frames (scene change + dHash dedupe), you pick one, and recon runs exactly as for a photo.</p>
   <figure class="shot"><img src="assets/img/console-frames.png" alt="GeoWeb video frames tab"><figcaption>Frames tab: contact sheet, timestamps, “use this frame”.</figcaption></figure>
+</section>
+
+<section id="sources" class="wrap">
+  <h2>From pixels to people</h2>
+  <p class="sub">A world-prior model can hand you a country at 9 % confidence. The step that actually names a place is a reverse image search — so GeoWeb automates it, then follows the name to the sources a human would open by hand.</p>
+  <div class="grid g3">
+    <div class="card"><div class="ic">🔍</div><h3>Google Lens fallback</h3><p>Runs by itself when a recon ends without an answer: overview sentence, exact vs visual matches, screenshot. If Google walls the browser the status says <code>blocked</code> and the console hands you the photo plus a paste box — never a fabricated result.</p></div>
+    <div class="card"><div class="ic">🔗</div><h3>Sources dossier</h3><p>The venue's own website, address, phone and e-mail, socials, press mentions and photographs — off-topic hits dropped by name relevance. “No phone published” is said plainly.</p></div>
+    <div class="card"><div class="ic">💬</div><h3>Ask, don't dig</h3><p>The console is chat-first: “what phone does the venue publish?”, “how sure are we, and why?”. Answers come only from this session's files, through a local Ollama model.</p></div>
+  </div>
 </section>
 
 <section id="mcp" class="wrap">
@@ -271,6 +285,19 @@ env = { GEOWEB_ROOT = "~/geoweb-photos" }</code></pre>
     <li><strong>Read the evidence</strong> — metadata, OCR, reverse-search sheets, detector crops, calibration, the prior map.</li>
     <li><strong>Decide and finish</strong> — record country/region/city/coords/confidence, write a report, keep the archive.</li>
   </ol>
+</section>
+
+<section id="changelog" class="wrap">
+  <h2>What's new</h2>
+  <p class="sub">Shipped in <code>Unreleased</code> — the full history lives in <a href="https://github.com/halimbahae/geoweb/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
+  <ul class="list">
+    <li><strong>Google Lens fallback</strong> — automated reverse image search with an honest <code>blocked</code> state and a paste-in import for walled browsers.</li>
+    <li><strong>Sources dossier</strong> — venue website, address, phone/e-mail, socials, press mentions and photographs, written to <code>recon/sources/</code>.</li>
+    <li><strong>Automatic chain</strong> — recon without an answer → Lens → sources dossier, no clicks. <code>GEOWEB_AUTO_FALLBACK=0</code> opts out.</li>
+    <li><strong>Chat-first Assistant tab</strong> — local Ollama, session evidence only, says what is missing instead of guessing.</li>
+    <li><strong>New MCP tools</strong> — <code>lens</code>, <code>import_lens</code>, <code>sources</code>, <code>ask</code>.</li>
+    <li><strong>Honest evidence handling</strong> — superseded model guesses are labelled as void once a place is named; Google's own page chrome is filtered out of Lens results.</li>
+  </ul>
 </section>
 
 <section id="demo" class="wrap">

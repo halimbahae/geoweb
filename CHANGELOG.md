@@ -10,6 +10,43 @@ GeoWeb — Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/>
 
 ### Added
 
+- **Google Lens fallback** (`sources/lens.py`) — the step that actually names a
+  place. Drives Lens in Chromium through Playwright (`make lens-install`), captures
+  the overview sentence, the exact/visual match links and a screenshot, and records
+  a CAPTCHA wall as `blocked` instead of pretending. A second mode imports a capture
+  taken by hand (`--from-text`), so a human-bypassed wall still yields real evidence.
+  Endpoint: `POST /api/session/<name>/lens` (job, or `{text, url}` to import).
+- **Sources dossier** (`sources/dossier.py`) — given the identified place, gathers
+  what a human would open by hand: the venue site (address, `tel:` numbers, e-mails,
+  socials, downloadable photographs), OSM/Nominatim extratags, and press mentions via
+  Google News RSS + web results (off-topic hits are dropped by name relevance). Written
+  to `recon/sources/dossier.json` + `recon/sources/img/*`. Endpoint:
+  `POST /api/session/<name>/dossier`.
+- **Sources tab** — renders the Lens capture (overview, exact vs visual matches) and
+  the dossier (website, address, phone, e-mail, socials, press/directory links, venue
+  photo grid) with one-click "Run Google Lens" / "Run Sources dossier".
+- **Assistant tab (chat-first console)** (`assistant/chat.py`) — ask questions about a
+  session in plain language; answers are built only from that session's report, recon
+  summary, Lens capture and dossier, through a **local Ollama** model (no key, nothing
+  leaves the machine; `GEOWEB_CHAT_MODEL` / `GEOWEB_OLLAMA` to configure). Says what is
+  missing instead of guessing. Endpoints: `GET /api/assistant`, `POST
+  /api/session/<name>/chat`.
+- **Source classification helpers** (`sources/classify.py`) and 25 unit tests
+  (`tests/test_sources.py`) covering phone/email extraction, relevance filtering,
+  engine-title cleanup, Lens section + venue parsing and the assistant's evidence block.
+- **The automatic chain** — a recon that ends without an answer now runs Lens by
+  itself, and a successful capture is followed by the sources dossier, named from
+  the Lens entity line (`venue_name`). A walled/unavailable Lens stops the chain and
+  the Sources tab switches to the paste-in import. `GEOWEB_AUTO_FALLBACK=0` opts out.
+- **Paste-in Lens import in the UI** — when Google walls the automated browser, the
+  Sources tab offers the photo, a link to `lens.google.com` and a textarea; the pasted
+  page is parsed into the same `lens.json` and the dossier then runs automatically.
+- **Toolbar shortcuts** — `📸 Lens` and `🔗 Sources` next to the recon buttons.
+- **MCP tools** — `lens`, `import_lens`, `sources` and `ask` (plus `lens`/`dossier` in
+  the `session` payload), so agents get the same fallback, dossier and chat.
+- **Docs** — `docs/api.md` covers the new endpoints and the automatic chain;
+  `docs/using-the-console.md` gains "Ask first" and "Sources" sections.
+
 - **GeoWeb brand & author** — the whole project is rebranded from the GeoInt
   web console to **GeoWeb**, with the author header
   (`Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/>`) on every source file.
@@ -67,6 +104,25 @@ GeoWeb — Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/>
   `mcp/README.md` gains a remote-SSE section for ChatGPT Connectors / Claude web.
 - **Dev dependency group** — `pytest`/`ruff` moved to a `[dependency-groups] dev`
   table so `uv run`, `uv sync --group dev` and CI resolve them consistently.
+
+### Changed
+
+- **Chat-first console** — the Assistant tab sits second and a session that already
+  has a recorded answer opens on it; the active tab now survives session refreshes.
+- **Lens quality gates** — the capture waits for the result sections (not for "some
+  link"), filters Google's own chrome (`is_engine`), reports `empty`/`blocked`/
+  `unavailable` honestly, and a missing Playwright browser is a message, not a crash.
+
+### Fixed
+
+- **Concluded sessions no longer advertise void model guesses** — once a session
+  has a recorded answer, the *World prior* block says **✔ Superseded** with the
+  identified place, coordinates and Maps link, fades the country percentages, labels
+  the ★ point guess **void**, and the prior map opens centred on the answer with the
+  GeoCLIP layers available in the layer control but not drawn. Previously an
+  uninformative prior (flat distribution, e.g. 9% top country) still presented its
+  CZ/NL/RO clusters and a ★ point guess as if they were candidates.
+
 
 ### 2026-10-11
 

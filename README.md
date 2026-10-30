@@ -44,6 +44,13 @@ Everything runs on your machine. Nothing is uploaded anywhere.
   stop any job.
 - 🧰 **Tools tab** — text→country, GeoNames, the reasoning board and a raw runner
   for every `scripts/*.py`.
+- 🔍 **Google Lens fallback** — when the local models come up empty, a reverse
+  image search names the place; a walled browser is recorded as blocked, with a
+  paste-in import instead of a fake. `make lens-install` once.
+- 🔗 **Sources dossier** — the venue's own website, address, phone/e-mail, socials,
+  press mentions and photographs, gathered automatically once the place has a name.
+- 💬 **Chat-first assistant** — ask a session questions in plain language, answered
+  only from its own evidence through a local Ollama model.
 - 🤖 **MCP server** — drive your archive from opencode, Claude Code, Codex, GitHub Copilot CLI, Grok CLI, Cursor or Claude Desktop.
 - 🐳 **Docker** — one image, optional ML build.
 

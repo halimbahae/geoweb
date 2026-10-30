@@ -2,6 +2,16 @@
 
 > Author: Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/>
 
+## Ask first
+
+The console is chat-first. Open a session that already has an answer and it lands
+on the **💬 Assistant** tab: ask "what phone number does the venue publish?",
+"how sure are we, and why?", "what did the press say?" and the answer is built
+from this session's own files — report, recon summary, Lens capture, sources
+dossier — through a local Ollama model. Nothing leaves the machine, and when the
+evidence is missing the assistant says so instead of guessing. The other tabs
+stay exactly where they were for when you want to read the raw evidence.
+
 ## Sessions
 
 A **session** is one uploaded item plus everything derived from it, stored as a
@@ -38,6 +48,23 @@ The recon view is built for a gut call, then confirmation:
 - **Prior** — the **interactive map**: OSM tiles or the pipeline's prior
   snapshot, GeoCLIP clusters sized by mass, top points, and a star for the model
   guess. Click a chip to fly there; go **fullscreen** for detail.
+
+## Sources: Lens, contacts, photographs
+
+The **Sources** tab holds two things:
+
+- **Google Lens** — the reverse-image search that actually names a place. The
+  automated browser is honest about walls: if Google answers with a CAPTCHA the
+  status says `blocked`, and the tab gives you the photo plus a paste box. Upload
+  the photo at `lens.google.com` yourself, copy the results page, paste it, and
+  the same parser writes the same evidence file.
+- **Sources dossier** — the venue's own website (address, phone, e-mail, socials,
+  photos), OpenStreetMap tags, and press/directory mentions. Off-topic hits are
+  dropped by name relevance; "no phone published" is said plainly rather than
+  filled in.
+
+Both run automatically after a recon that ends without an answer: recon → Lens →
+dossier. Turn the chain off with `GEOWEB_AUTO_FALLBACK=0`.
 
 ## Tools
 

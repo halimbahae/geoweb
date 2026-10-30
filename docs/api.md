@@ -93,9 +93,13 @@ Full state:
   "result": null, "truth": null,
   "files":  [ { "path": "recon/prior/prior_map.png", "size": 12345 } ],
   "jobs":   [ { "job": "894adbb348c8", "kind": "recon", "status": "running" } ],
+  "lens":   { "status": "ok", "place": "…", "links": [ … ] },
+  "dossier": { "address": "…", "phone": [], "site": {…}, "sources": [ … ], "images": [ … ] },
   "report": ""
 }
 ```
+
+`lens` and `dossier` are `{}` until those steps have run.
 
 ### `GET /api/session/<name>/recon`
 
@@ -221,6 +225,70 @@ Renames the folder and rewrites stale paths inside text artifacts.
 
 ### `job/<jobid>/stop` — kill one job
 
+### `lens` — reverse-image search (Google Lens)
+
+Drives Lens in Chromium through Playwright (`make lens-install`), captures the
+overview sentence, the exact/visual match links and a screenshot into
+`recon/lens/lens.json`. A CAPTCHA wall is recorded as `"status": "blocked"` —
+it is never worked around or guessed.
+
+```jsonc
+{}                                   // start the browser job (202 + job descriptor)
+{ "headed": true }                   // show the browser, so a human can pass the wall
+{ "frame": "frame_000075.jpg" }      // analyse one video frame
+```
+
+If Google walls the automated browser, import a capture taken by hand — the
+same parser writes the same evidence file:
+
+```jsonc
+{ "text": "…Lens results page text…", "url": "https://lens.google.com/search?…" }
+```
+
+That call is synchronous and returns `{ "ok": true, "imported": true, "lens": {…} }`.
+
+### `dossier` — the venue's own sources, contacts and photographs
+
+```jsonc
+{ "name": "Cinéma Le Colisée", "city": "Marrakech", "country": "MA",
+  "lat": 31.635786, "lon": -8.015242 }
+```
+
+`name` defaults to the session's recorded city. Collects the venue website
+(address, `tel:` numbers, e-mails, socials, photos), OSM/Nominatim tags and
+press mentions (Google News RSS + web results), dropping off-topic hits by name
+relevance. Writes `recon/sources/dossier.json` + `recon/sources/img_*`, returns
+`202` + a job descriptor.
+
+### `chat` — ask this session a question
+
+```jsonc
+{ "message": "what phone number does the venue publish?",
+  "history": [ { "role": "user", "content": "…" }, { "role": "assistant", "content": "…" } ] }
+```
+
+Synchronous. The answer is built only from this session's report, recon summary,
+Lens capture and dossier, through a local Ollama model (`GEOWEB_CHAT_MODEL`,
+`GEOWEB_OLLAMA`). Returns `{ "answer": "…", "model": "…", "seconds": 19.2 }`;
+`503` with a message when Ollama is not reachable.
+
+### `GET /api/assistant` — model availability
+
+```json
+{ "available": true, "models": ["qwen3.5:4b"], "default": "qwen3.5:4b",
+  "host": "http://127.0.0.1:11434" }
+```
+
+---
+
+## The automatic chain
+
+When a recon finishes on a session with no recorded answer, the server starts
+the Lens fallback by itself; a successful capture is then followed by the
+sources dossier (named from the Lens entity line). A walled or unavailable
+Lens stops the chain and the Sources tab offers the paste-in import instead.
+Disable with `GEOWEB_AUTO_FALLBACK=0`.
+
 ---
 
 ## `DELETE /api/session/<name>`
@@ -237,5 +305,6 @@ curl -sX DELETE $BASE/api/session/$S | jq
 
 Prefer a typed interface for an AI assistant? The same archive is exposed as MCP
 tools by `mcp/geoweb_mcp.py` (`sessions`, `session`, `start_recon`,
-`recon_status`, `read_file`, `frames`, `tools`). See
+`recon_status`, `read_file`, `frames`, `lens`, `import_lens`, `sources`, `ask`,
+`tools`). See
 [`../mcp/README.md`](../mcp/README.md).

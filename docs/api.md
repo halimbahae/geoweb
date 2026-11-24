@@ -10,7 +10,42 @@ over JSON. Everything is local — default bind `127.0.0.1:8787`, archive root
 ```bash
 python3 web/app.py --root ~/geoweb-photos --port 8787 --open
 BASE=http://127.0.0.1:8787
+TOKEN=Kx8…                        # the ?token=… the server printed at startup
+AUTH="X-GeoWeb-Token: $TOKEN"     # every curl below sends it
 ```
+
+## Authentication
+
+The server is single-user but **not unauthenticated** (see
+[SECURITY.md](../SECURITY.md)). It prints a ready-to-open URL at startup:
+
+```
+[webui] Open the console: http://127.0.0.1:8787/?token=Kx8…
+```
+
+- **Browser** — open that URL once: `GET /?token=…` answers `303` with an
+  `HttpOnly; SameSite=Strict` `geoweb_token` cookie and redirects to `/`; every
+  later `/api/*` call is then authenticated, no query token needed.
+- **CLI / scripts** — send the token as a header:
+
+```bash
+curl -s $BASE/api/sessions -H "$AUTH"
+```
+
+Pin the token instead of generating one with `--token <value>` or
+`$GEOWEB_TOKEN` (useful for a systemd unit or a reverse proxy).
+
+Failures:
+
+| Case | Response |
+| --- | --- |
+| Missing/invalid token on `/api/*` | `401 {"error": "unauthorized: …"}` |
+| `Host` header is not loopback while bound to loopback (anti DNS-rebinding) | `403 {"error": "forbidden: unexpected Host header"}` |
+| non-GET request with a foreign `Origin` | `403 {"error": "forbidden: cross-origin request"}` |
+
+`GET /api/health` is the one exception: it answers `200` without a token but then
+returns `{"ok": true, "authenticated": false}` (no `repo`/`uv`), so a container
+healthcheck keeps working while nothing about the machine leaks.
 
 Conventions:
 
@@ -19,8 +54,9 @@ Conventions:
 - Jobs are asynchronous. A `POST` that starts work returns `202` with a job
   descriptor `{job, session, kind, command, started, log, ...}`; poll status to
   see it finish.
-- Errors are `{"error": "..."}` with `400` (bad input), `404` (not found),
-  `409` (conflict, e.g. session busy), `429` (too many concurrent jobs).
+- Errors are `{"error": "..."}` with `400` (bad input), `401` (no/invalid token),
+  `403` (bad Host or cross-origin), `404` (not found), `409` (conflict, e.g.
+  session busy), `429` (too many concurrent jobs).
 - Limits: uploads ≤ 150 MB; at most `--max-jobs` (default 3) concurrent jobs.
 
 ---
@@ -37,8 +73,8 @@ Conventions:
 ## Health
 
 ```bash
-curl $BASE/api/health
-# {"ok": true, "repo": "/abs/path/geoweb", "uv": "/Users/you/.local/bin/uv"}
+curl -s $BASE/api/health -H "$AUTH"
+# {"ok": true, "authenticated": true, "repo": "/abs/path/geoweb", "uv": "/Users/you/.local/bin/uv"}
 ```
 
 ---
@@ -74,8 +110,9 @@ videos). The server creates a session folder, byte-copies the file, checksums it
 and — for video — immediately queues frame extraction.
 
 ```bash
-curl -sX POST $BASE/api/sessions -F photo=@duomo.jpg | jq
-curl -sX POST $BASE/api/sessions -F photo=@clip.mp4   | jq
+curl -s $BASE/api/sessions -H "$AUTH" | jq
+curl -sX POST $BASE/api/sessions -H "$AUTH" -F photo=@duomo.jpg | jq
+curl -sX POST $BASE/api/sessions -H "$AUTH" -F photo=@clip.mp4   | jq
 ```
 
 ```json
@@ -145,8 +182,8 @@ metadata, the answer/ground-truth block, the analyst report and the full
 (`{ schema, exported_at, name, session, report_md, recon }`).
 
 ```bash
-curl -sOJ "$BASE/api/session/$S/export?fmt=md"     # → <name>-geoweb-report.md
-curl -sOJ "$BASE/api/session/$S/export?fmt=json"   # → <name>-geoweb-report.json
+curl -sOJ "$BASE/api/session/$S/export?fmt=md"   -H "$AUTH"   # → <name>-geoweb-report.md
+curl -sOJ "$BASE/api/session/$S/export?fmt=json" -H "$AUTH"   # → <name>-geoweb-report.json
 ```
 
 The console also builds branded **HTML** (logo + author, print stylesheet) and
@@ -178,7 +215,7 @@ The console also builds branded **HTML** (logo + author, print stylesheet) and
 | `skip` | list of step names to skip (`meta`, `detect`, `calib`, `prior`, `intake`, `textgeo`) |
 
 ```bash
-curl -sX POST $BASE/api/session/$S/recon \
+curl -sX POST $BASE/api/session/$S/recon -H "$AUTH" \
   -H 'content-type: application/json' -d '{"no_ml":true}' | jq
 ```
 
@@ -296,7 +333,7 @@ Disable with `GEOWEB_AUTO_FALLBACK=0`.
 Deletes the session folder and terminates its running jobs.
 
 ```bash
-curl -sX DELETE $BASE/api/session/$S | jq
+curl -sX DELETE $BASE/api/session/$S -H "$AUTH" | jq
 ```
 
 ---

@@ -20,7 +20,8 @@ cd geoweb
 python3 web/app.py --open
 ```
 
-Open <http://127.0.0.1:8787>, drop a photo, pick **Quick** recon, and read the
+Open the `?token=…` URL the server prints (with `--open` it opens for you) — it
+signs this browser in, then drop a photo, pick **Quick** recon, and read the
 evidence as it arrives. Your archive lives in `~/geoweb-photos` by default:
 
 ```bash
@@ -30,7 +31,8 @@ python3 web/app.py --root /mnt/photos --port 8788 --host 0.0.0.0 --open
 ## Video
 
 ```bash
-curl -sX POST http://127.0.0.1:8787/api/sessions -F photo=@clip.mp4
+TOKEN=…   # the ?token=… the server printed at startup
+curl -sX POST http://127.0.0.1:8787/api/sessions -H "X-GeoWeb-Token: $TOKEN" -F photo=@clip.mp4
 ```
 
 Or just drag a clip into the console — GeoWeb cuts it into a contact sheet of
@@ -40,7 +42,7 @@ distinct frames, you pick one, and recon runs as usual. Details:
 ## Docker
 
 ```bash
-docker compose up --build          # then open http://127.0.0.1:8787
+docker compose up --build          # open the ?token=… URL from: docker compose logs geoweb
 # with the ML world-prior models baked in:
 docker compose build --build-arg BUILD_ML=1
 ```

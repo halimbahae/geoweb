@@ -21,6 +21,10 @@ python3 web/app.py --root /data/photos  # a different archive root
 python3 web/app.py --open               # open the browser
 ```
 
+The server prints a ready-to-open `…/?token=…` URL at startup — use it (or
+`--open`) once per browser: it sets the `geoweb_token` cookie that authenticates
+every `/api/*` call. Pin the token with `--token` / `$GEOWEB_TOKEN`.
+
 Then drag a photo into the drop zone. **Quick recon** runs the fast first pass
 (metadata, OCR + text→country, edge/corner crops, Yandex + Baidu reverse image
 search) with no local models. **Full recon (ML)** also runs the world-prior models,
@@ -68,6 +72,12 @@ so a restarted server still sees finished jobs.
 ## Notes
 
 - Binds to `127.0.0.1` by default — a local-only tool, not for public hosting.
+- **Access control** — `/api/*` requires the access token (generated at startup
+  and printed as the `?token=…` URL, or pinned with `--token` / `$GEOWEB_TOKEN`).
+  A loopback-bound server only answers loopback `Host` headers (anti
+  DNS-rebinding) and a non-GET request carrying a foreign `Origin` is refused.
+  `GET /api/health` stays public but then reports `"authenticated": false` and
+  no machine paths. See [SECURITY.md](../SECURITY.md).
 - The server never evaluates shell; all script invocations go through
   `subprocess` argument lists.
 - `test_photo.jpg` and the `~/geoweb-photos` archives are just your local test data,

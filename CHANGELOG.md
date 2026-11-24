@@ -8,6 +8,22 @@ GeoWeb — Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/>
 
 ## [Unreleased]
 
+### Security
+
+- **Access control on the console server** (`web/app.py`) — the HTTP server no
+  longer serves `/api/*` to anyone who can reach the port. It now:
+  - requires a random per-run **token** (`--token` / `$GEOWEB_TOKEN` to pin it)
+    on every `/api/*` call, sent as the `X-GeoWeb-Token` header or held as the
+    `geoweb_token` `HttpOnly; SameSite=Strict` cookie a browser gets from the
+    `/?token=…` URL the server prints at startup;
+  - refuses **cross-origin** writes (`Origin` check) so a visited page can't
+    drive your archive;
+  - rejects **non-loopback `Host` headers** when bound to loopback, defeating
+    DNS-rebinding;
+  - keeps `/api/health` public for the Docker healthcheck but answers it with
+    `{"ok": true, "authenticated": false}` when unauthenticated (no machine paths
+    leaked). The console UI shows a **token required** state until signed in.
+
 ### Added
 
 - **Google Lens fallback** (`sources/lens.py`) — the step that actually names a

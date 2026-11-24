@@ -9,6 +9,12 @@ services:
     image: geoweb:latest
     ports:
       - "8787:8787"
+    environment:
+      # The image binds 0.0.0.0, so /api/* needs the token. Pin it here to keep a
+      # stable value across restarts (e.g. GEOWEB_TOKEN=$(openssl rand -hex 24) in
+      # a .env); leave it empty to let the container generate a fresh one per start
+      # and read the ready-to-open ?token=… URL from `docker compose logs geoweb`.
+      GEOWEB_TOKEN: ${GEOWEB_TOKEN:-}
     volumes:
       # One place for all archives. Back it up; it is the only thing that matters.
       - ./data:/geoweb-photos

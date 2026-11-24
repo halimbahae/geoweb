@@ -143,7 +143,8 @@ sessions now show their contact sheet instead of a "photo not found" tile.
 
 ```bash
 # in the console: drag a clip onto the dropzone
-curl -sX POST http://127.0.0.1:8787/api/sessions -F photo=@clip.mp4
+TOKEN=…   # the ?token=… the server printed at startup
+curl -sX POST http://127.0.0.1:8787/api/sessions -H "X-GeoWeb-Token: $TOKEN" -F photo=@clip.mp4
 ```
 GeoWeb extracts representative frames, you choose one, and recon treats it like a
 photo. See [docs/video-guide.md](docs/video-guide.md) for the sampler internals.

@@ -12,6 +12,11 @@ through `uv run`. No external packages are needed for the server itself;
 upload a photo or a clip, run the recon pass, read the evidence and finish
 the archive.
 
+The console is single-user and local: `/api/*` needs an access token (generated
+at startup, printed as the `?token=…` console URL, or pinned with `--token` /
+`$GEOWEB_TOKEN`), a loopback-bound server refuses non-loopback Host headers, and
+cross-site writes are rejected. See SECURITY.md.
+
 Author: Bahae Eddine HALIM <https://www.linkedin.com/in/halimbahae/>
 """
 from __future__ import annotations
@@ -22,6 +27,7 @@ import json
 import mimetypes
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -44,6 +50,16 @@ STATIC = Path(__file__).resolve().parent / "static"
 UV = os.environ.get("UV") or "uv"
 PY = sys.executable
 MAX_BODY = 150 * 1024 * 1024
+
+# Access control. The console is a single-user local tool, but a browser on this
+# machine (or a hostile page abusing the loopback address via DNS rebinding) can
+# reach the API, and `--host 0.0.0.0` puts the whole photo archive on the network.
+# Every `/api/*` call therefore needs a token, and a loopback-bound server only
+# answers loopback Host headers. See SECURITY.md.
+TOKEN_HEADER = "X-GeoWeb-Token"     # non-browser clients (curl, scripts)
+TOKEN_COOKIE = "geoweb_token"       # the browser UI, set from /?token=…
+TOKEN_ENV = "GEOWEB_TOKEN"          # pin the token instead of generating one
+LOOPBACK_NAMES = {"localhost", "127.0.0.1", "::1", "[::1]"}
 
 if str(REPO) not in sys.path:  # the chat lives in assistant/chat.py, beside web/
     sys.path.insert(0, str(REPO))
@@ -72,6 +88,61 @@ MAX_JOBS = 3                        # global cap on concurrent jobs, overridable
 
 def log(msg: str) -> None:
     print(f"[webui] {msg}", flush=True)
+
+
+# --------------------------------------------------------------------------- #
+# Access control (Host + token)
+# --------------------------------------------------------------------------- #
+
+def _host_only(value: str) -> str:
+    """The host part of a Host header or URL authority, port stripped (IPv6 kept)."""
+    value = (value or "").strip().lower()
+    if value.startswith("["):                 # [::1]:8787
+        return value.split("]", 1)[0] + "]"
+    return value.rsplit(":", 1)[0] if value.count(":") == 1 else value
+
+
+def is_loopback_host(value: str) -> bool:
+    host = _host_only(value)
+    return host in LOOPBACK_NAMES or host.startswith("127.")
+
+
+def host_allowed(host_header: str, bind_host: str) -> bool:
+    """Anti DNS-rebinding: a loopback-bound server answers loopback hosts only.
+
+    A hostile page can point `evil.example` at 127.0.0.1 and talk to the console
+    from the victim's browser; the Host header gives that away. A server bound to
+    a real interface (`--host 0.0.0.0`) has no name to pin down, so it is exempt.
+    """
+    if not is_loopback_host(bind_host):
+        return True
+    return is_loopback_host(host_header)
+
+
+def origin_allowed(origin: str, bind_host: str) -> bool:
+    """Cross-site state changes are refused: the Origin must be a loopback origin."""
+    if not origin:
+        return True                             # non-browser client; token still applies
+    return host_allowed(urlparse(origin).hostname or "", bind_host)
+
+
+def cookie_value(header: str, name: str) -> str:
+    for chunk in (header or "").split(";"):
+        key, sep, value = chunk.strip().partition("=")
+        if sep and key == name:
+            return value
+    return ""
+
+
+def token_ok(provided: str, expected: str) -> bool:
+    """Constant-time token comparison; an empty expected token disables auth."""
+    if not expected:
+        return True
+    return secrets.compare_digest(provided or "", expected)
+
+
+def new_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
 # --------------------------------------------------------------------------- #
@@ -672,10 +743,41 @@ TOOLS_INFO = [
 class Handler(BaseHTTPRequestHandler):
     server_version = "GeoWeb/0.1"
     root: Path = Path.home() / "geoweb-photos"
+    token: str = ""                 # required for /api/*; empty disables auth
+    bind_host: str = "127.0.0.1"    # arms the Host check when it is a loopback address
 
     # -- plumbing ----------------------------------------------------------- #
     def log_message(self, fmt: str, *args: object) -> None:
         log("[http] " + (fmt % args))
+
+    def _provided_token(self) -> str:
+        return self.headers.get(TOKEN_HEADER) or cookie_value(self.headers.get("Cookie", ""), TOKEN_COOKIE)
+
+    def _guard(self) -> bool:
+        """Refuse requests that fail the Host / Origin / token checks.
+
+        Returns True when the request may proceed; otherwise an error response has
+        already been sent. `/api/health` stays reachable so container healthchecks
+        and the console's connection pill keep working (it then omits the paths).
+        """
+        if not host_allowed(self.headers.get("Host", ""), self.bind_host):
+            log(f"[http] blocked Host header {self.headers.get('Host')!r} (anti-DNS-rebinding)")
+            self.send_json({"error": "forbidden: unexpected Host header"}, 403)
+            return False
+        if self.token:
+            path = urlparse(self.path).path
+            if path == "/api/" or path.startswith("/api/"):
+                if self.command != "GET" and not origin_allowed(self.headers.get("Origin", ""), self.bind_host):
+                    log(f"[http] blocked cross-origin {self.command} from {self.headers.get('Origin')!r}")
+                    self.send_json({"error": "forbidden: cross-origin request"}, 403)
+                    return False
+                if path != "/api/health" and not token_ok(self._provided_token(), self.token):
+                    self.send_json({
+                        "error": "unauthorized: open the console with the ?token=… URL printed in the "
+                                 f"server log, or send the {TOKEN_HEADER} header",
+                    }, 401)
+                    return False
+        return True
 
     def _read_body(self) -> bytes:
         length = int(self.headers.get("Content-Length") or 0)
@@ -725,8 +827,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         route = self._route()
         path, q = route["path"], route["query"]
+        if not self._guard():
+            return
         try:
             if path == "/" or path == "/index.html":
+                if self._handoff_token(q):
+                    return
                 self._static_file("index.html")
             elif path.startswith("/static/"):
                 self._static_file(path[len("/static/"):])
@@ -737,7 +843,13 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/assistant":
                 self.send_json(assistant.list_models())
             elif path == "/api/health":
-                self.send_json({"ok": True, "repo": str(REPO), "uv": shutil.which(UV)})
+                # Reachable without a token (container healthcheck, connection pill);
+                # the machine-local details go only to an authenticated caller.
+                if token_ok(self._provided_token(), self.token):
+                    self.send_json({"ok": True, "authenticated": True, "repo": str(REPO),
+                                    "uv": shutil.which(UV)})
+                else:
+                    self.send_json({"ok": True, "authenticated": False})
             else:
                 self.send_json({"error": "not found"}, 404)
         except (ValueError, KeyError) as exc:
@@ -745,6 +857,25 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001
             log(f"GET {path} error: {exc!r}")
             self.send_json({"error": f"internal error: {exc}"}, 500)
+
+    def _handoff_token(self, q: dict) -> bool:
+        """Trade `/?token=…` for a SameSite cookie, then bounce to the clean URL.
+
+        The browser UI then authenticates every `/api/*` call by itself, and the
+        token never lingers in the address bar, history or a `Referer` header.
+        """
+        tok = q.get("token")
+        if not tok or not self.token:
+            return False
+        if not token_ok(tok, self.token):
+            self.send_json({"error": "unauthorized: bad token"}, 401)
+            return True
+        self.send_response(303)
+        self.send_header("Location", "/")
+        self.send_header("Set-Cookie", f"{TOKEN_COOKIE}={tok}; HttpOnly; SameSite=Strict; Path=/")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        return True
 
     def _static_file(self, rel: str) -> None:
         rel = rel.split("?", 1)[0]
@@ -853,6 +984,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- POST --------------------------------------------------------------- #
     def do_POST(self) -> None:  # noqa: N802
+        if not self._guard():
+            return
         route = self._route()
         path = route["path"]
         body = self._read_body()
@@ -885,6 +1018,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": f"internal error: {exc}"}, 500)
 
     def do_DELETE(self) -> None:  # noqa: N802
+        if not self._guard():
+            return
         path = self.path.split("?", 1)[0]
         try:
             if not path.startswith("/api/session/"):
@@ -1377,19 +1512,32 @@ def main() -> None:
     ap.add_argument("--max-jobs", type=int, default=3, help="max concurrent GeoWeb jobs (default 3)")
     ap.add_argument("--root", default=str(Path.home() / "geoweb-photos"),
                     help="Photo archive root (default ~/geoweb-photos)")
+    ap.add_argument("--token", default=os.environ.get(TOKEN_ENV) or "",
+                    help=f"access token for /api/* (default: random, or ${TOKEN_ENV})")
     ap.add_argument("--open", action="store_true", help="open the browser after starting")
     args = ap.parse_args()
     global MAX_JOBS
     MAX_JOBS = max(1, args.max_jobs)
     Handler.root = Path(args.root).expanduser().resolve()
     Handler.root.mkdir(parents=True, exist_ok=True)
+    Handler.token = args.token or new_token()
+    Handler.bind_host = args.host
     cleanup_orphans(Handler.root)
     httpd = ThreadingHTTPServer((args.host, args.port), Handler)
-    url = f"http://{args.host}:{args.port}"
-    log(f"GeoWeb listening on {url}  (archive root: {Handler.root}, max jobs: {MAX_JOBS})")
-    log(f"Try: {url}  |  press Ctrl+C to stop")
+    # 0.0.0.0 is not browsable; the loopback URL is what the operator actually opens.
+    shown_host = "127.0.0.1" if args.host in ("0.0.0.0", "::", "") else args.host
+    url = f"http://{shown_host}:{args.port}"
+    entry = f"{url}/?token={Handler.token}"
+    log(f"GeoWeb listening on http://{args.host}:{args.port}  (archive root: {Handler.root}, "
+        f"max jobs: {MAX_JOBS})")
+    log(f"Open the console: {entry}")
+    log("Share that URL once per browser — it sets a SameSite cookie; /api/* then needs no token.")
+    if not is_loopback_host(args.host):
+        log(f"warning: bound to {args.host} — the console is reachable from the network. Keep the "
+            f"token secret or put a reverse proxy in front (see docs/deployment.md).")
+    log("press Ctrl+C to stop")
     if args.open:
-        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+        threading.Timer(0.5, lambda: webbrowser.open(entry)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

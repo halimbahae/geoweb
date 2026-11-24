@@ -1532,15 +1532,23 @@ function errMsg(e) {
 let connText = "…";
 
 async function health() {
+  const p = $("#conn");
   try {
     const h = await api("/api/health");
+    if (h.authenticated === false) {
+      // the server is up but this browser has no access token yet
+      p.textContent = "token required";
+      p.title = "Open the ?token=… URL printed in the server log to sign this browser in.";
+      p.className = "pill err";
+      return;
+    }
     connText = h.uv ? "uv ✓ · python ✓" : "uv not found";
-    const p = $("#conn");
     p.textContent = connText;
+    p.title = "";
     p.classList = "pill ok";
   } catch (e) {
-    $("#conn").textContent = "server offline";
-    $("#conn").className = "pill err";
+    p.textContent = "server offline";
+    p.className = "pill err";
   }
 }
 
